@@ -98,6 +98,64 @@ write_files:
       kernel.kptr_restrict = 2
 
   # =========================================================================
+  # Shared Libraries (eliminate code duplication)
+  # =========================================================================
+  - path: /usr/local/lib/headscale-common.sh
+    permissions: "0644"
+    content: |
+      #!/bin/bash
+      # common.sh - Shared utilities for Headscale VPS scripts
+      # Provides color definitions, logging functions, and banners
+
+      # Color definitions (used across multiple scripts)
+      RED='\033[0;31m'
+      GREEN='\033[0;32m'
+      YELLOW='\033[1;33m'
+      NC='\033[0m' # No Color
+
+      # Logging functions
+      print_success() { echo -e "${GREEN}[OK]${NC} $1"; }
+      print_warning() { echo -e "${YELLOW}[!!]${NC} $1"; }
+      print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+      print_info() { echo -e "${NC}[INFO]${NC} $1"; }
+
+      # Banner printing
+      print_banner() {
+        local title="$1"
+        echo ""
+        echo "=========================================="
+        echo "  $title"
+        echo "=========================================="
+        echo ""
+      }
+
+  - path: /usr/local/lib/headscale-validators.sh
+    permissions: "0644"
+    content: |
+      #!/bin/bash
+      # validators.sh - Input validation functions for Headscale VPS
+
+      # Validate domain name format
+      validate_domain() {
+        local domain="$1"
+        [[ "$domain" =~ ^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$ ]]
+      }
+
+      # Validate email address format
+      # TODO: Regex is too permissive - accepts user@@example.com
+      validate_email() {
+        local email="$1"
+        [[ "$email" =~ ^[^@]+@[^@]+\.[^@]+$ ]]
+      }
+
+      # Validate UUID or Azure tenant ID
+      validate_uuid() {
+        local uuid="$1"
+        [[ "$uuid" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]] || \
+        [[ "$uuid" =~ ^[a-zA-Z0-9-]+\.onmicrosoft\.com$ ]]
+      }
+
+  # =========================================================================
   # Version Configuration (edit these to pin specific versions)
   # =========================================================================
   - path: /etc/headscale/versions.conf
@@ -106,13 +164,13 @@ write_files:
       # Headscale VPS Version Configuration
       # Edit these values to pin specific versions
       # Leave empty to use latest releases
-      
+
       # Node.js LTS version for Headplane (via nvm)
       NODE_VERSION="22"
-      
+
       # Headplane version (git tag, e.g., "v0.6.0" or "main" for latest)
       HEADPLANE_VERSION=""
-      
+
       # Headscale version (leave empty for latest)
       HEADSCALE_VERSION=""
 
@@ -277,35 +335,13 @@ write_files:
     content: |
       #!/bin/bash
       set -e
-      
+
+      # Load shared libraries
+      source /usr/local/lib/headscale-common.sh
+      source /usr/local/lib/headscale-validators.sh
+
       ENV_FILE="/etc/environment.d/headscale.conf"
       TEMPLATES_DIR="/etc/headscale/templates"
-      
-      # Colors for output
-      RED='\033[0;31m'
-      GREEN='\033[0;32m'
-      YELLOW='\033[1;33m'
-      NC='\033[0m' # No Color
-      
-      print_banner() {
-        echo ""
-        echo "=========================================="
-        echo "  Headscale + Headplane Configuration"
-        echo "=========================================="
-        echo ""
-      }
-      
-      print_success() {
-        echo -e "${GREEN}[OK]${NC} $1"
-      }
-      
-      print_warning() {
-        echo -e "${YELLOW}[!!]${NC} $1"
-      }
-      
-      print_error() {
-        echo -e "${RED}[ERROR]${NC} $1"
-      }
       
       # Load existing configuration if present
       load_existing_config() {
@@ -345,53 +381,24 @@ write_files:
         fi
       }
       
-      # Validation functions
-      validate_domain() {
-        local domain="$1"
-        if [[ ! "$domain" =~ ^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$ ]]; then
-          print_error "Invalid domain format: $domain"
-          return 1
-        fi
-        return 0
-      }
-      
-      validate_email() {
-        local email="$1"
-        if [[ ! "$email" =~ ^[^@]+@[^@]+\.[^@]+$ ]]; then
-          print_error "Invalid email format: $email"
-          return 1
-        fi
-        return 0
-      }
-      
-      validate_uuid() {
-        local uuid="$1"
-        # Accept both GUID format and *.onmicrosoft.com tenant names
-        if [[ ! "$uuid" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]] && \
-           [[ ! "$uuid" =~ ^[a-zA-Z0-9-]+\.onmicrosoft\.com$ ]]; then
-          print_error "Invalid tenant ID format: $uuid (expected GUID or *.onmicrosoft.com)"
-          return 1
-        fi
-        return 0
-      }
-      
+      # Validate all inputs (using shared validation library)
       validate_inputs() {
         local valid=true
-        
-        validate_domain "$HEADSCALE_DOMAIN" || valid=false
-        validate_uuid "$AZURE_TENANT_ID" || valid=false
-        validate_email "$ALLOWED_EMAIL" || valid=false
-        
+
+        validate_domain "$HEADSCALE_DOMAIN" || { print_error "Invalid domain format: $HEADSCALE_DOMAIN"; valid=false; }
+        validate_uuid "$AZURE_TENANT_ID" || { print_error "Invalid tenant ID format: $AZURE_TENANT_ID (expected GUID or *.onmicrosoft.com)"; valid=false; }
+        validate_email "$ALLOWED_EMAIL" || { print_error "Invalid email format: $ALLOWED_EMAIL"; valid=false; }
+
         if [ -z "$AZURE_CLIENT_ID" ]; then
           print_error "Azure Client ID cannot be empty"
           valid=false
         fi
-        
+
         if [ -z "$AZURE_CLIENT_SECRET" ]; then
           print_error "Azure Client Secret cannot be empty"
           valid=false
         fi
-        
+
         if [ "$valid" = false ]; then
           return 1
         fi
@@ -565,7 +572,7 @@ write_files:
       
       # Main configuration flow
       main() {
-        print_banner
+        print_banner "Headscale + Headplane Configuration"
         load_existing_config
         
         echo "For Azure AD setup instructions, see:"
@@ -1013,13 +1020,10 @@ write_files:
     content: |
       #!/bin/bash
       set -e
-      
-      # Colors for output
-      RED='\033[0;31m'
-      GREEN='\033[0;32m'
-      YELLOW='\033[1;33m'
-      NC='\033[0m'
-      
+
+      # Load shared libraries
+      source /usr/local/lib/headscale-common.sh
+
       API_KEY_FILE="/var/lib/headscale/api_key"
       API_KEY_EXPIRES="/var/lib/headscale/api_key_expires"
       HEADPLANE_CONFIG="/etc/headplane/config.yaml"
@@ -1267,69 +1271,6 @@ write_files:
       WantedBy=timers.target
 
   # =========================================================================
-  # ngrok Installation and Configuration
-  # =========================================================================
-  - path: /usr/local/bin/install-ngrok
-    permissions: "0755"
-    content: |
-      #!/bin/bash
-      # Install ngrok for temporary public access (testing/OAuth callbacks)
-      set -e
-
-      echo "Installing ngrok..."
-
-      # Download ngrok
-      NGROK_VERSION="v3-stable"
-      curl -sSL https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-${NGROK_VERSION}-linux-amd64.tgz -o /tmp/ngrok.tgz
-
-      # Extract
-      tar -xzf /tmp/ngrok.tgz -C /usr/local/bin
-      chmod +x /usr/local/bin/ngrok
-      rm /tmp/ngrok.tgz
-
-      echo "✓ ngrok installed: $(ngrok version)"
-      echo ""
-      echo "Configure ngrok with:"
-      echo "  ngrok config add-authtoken YOUR_TOKEN"
-      echo ""
-      echo "Start tunnel with:"
-      echo "  start-ngrok-tunnel"
-
-  # =========================================================================
-  # ngrok Helper Script (start tunnel with pre-configured settings)
-  # =========================================================================
-  - path: /usr/local/bin/start-ngrok-tunnel
-    permissions: "0755"
-    content: |
-      #!/bin/bash
-      # Start ngrok tunnel for Headscale
-      # This script should be run AFTER configuring ngrok authtoken
-
-      AUTHTOKEN="[REDACTED-NGROK-TOKEN]"
-      DOMAIN="[REDACTED-NGROK-DOMAIN]"
-
-      echo "=========================================="
-      echo "  Starting ngrok tunnel"
-      echo "=========================================="
-      echo ""
-
-      # Configure authtoken if not already done
-      if [ ! -f ~/.ngrok2/ngrok.yml ]; then
-        echo "Configuring ngrok authtoken..."
-        ngrok config add-authtoken "$AUTHTOKEN"
-      fi
-
-      echo "Tunnel configuration:"
-      echo "  Domain: https://$DOMAIN"
-      echo "  Target: https://localhost:443"
-      echo ""
-      echo "Starting tunnel... (Press Ctrl+C to stop)"
-      echo ""
-
-      # Start tunnel with static domain
-      ngrok http --domain="$DOMAIN" https://localhost:443
-
-  # =========================================================================
   # Logrotate Configuration (prevents log files from growing indefinitely)
   # =========================================================================
   - path: /etc/logrotate.d/headscale
@@ -1382,26 +1323,16 @@ write_files:
     content: |
       #!/bin/bash
       set -e
-      
+
+      # Load shared libraries
+      source /usr/local/lib/headscale-common.sh
+      source /usr/local/lib/headscale-validators.sh
+
       CONFIG_FILE="/etc/msmtprc"
       PASSWORD_FILE="/etc/msmtp-password"
       ALIASES_FILE="/etc/aliases"
-      
-      # Colors
-      RED='\033[0;31m'
-      GREEN='\033[0;32m'
-      YELLOW='\033[1;33m'
-      NC='\033[0m'
-      
-      print_success() { echo -e "${GREEN}[OK]${NC} $1"; }
-      print_warning() { echo -e "${YELLOW}[!!]${NC} $1"; }
-      print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
-      
-      echo ""
-      echo "=========================================="
-      echo "  msmtp Email Configuration (M365)"
-      echo "=========================================="
-      echo ""
+
+      print_banner "msmtp Email Configuration (M365)"
       echo "This configures email notifications via Microsoft 365."
       echo ""
       echo "Prerequisites:"
@@ -1424,16 +1355,16 @@ write_files:
       read -s SMTP_PASSWORD
       echo ""
       
-      # Validate
-      if [[ ! "$SENDER_EMAIL" =~ ^[^@]+@[^@]+\.[^@]+$ ]]; then
+      # Validate using shared validation library
+      validate_email "$SENDER_EMAIL" || {
         print_error "Invalid sender email format"
         exit 1
-      fi
-      
-      if [[ ! "$RECIPIENT_EMAIL" =~ ^[^@]+@[^@]+\.[^@]+$ ]]; then
+      }
+
+      validate_email "$RECIPIENT_EMAIL" || {
         print_error "Invalid recipient email format"
         exit 1
-      fi
+      }
       
       # Write password file
       echo -n "$SMTP_PASSWORD" > "$PASSWORD_FILE"

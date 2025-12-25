@@ -426,18 +426,65 @@ function Install-Ngrok {
 
     Write-Host ""
     Write-Host "========================================" -ForegroundColor Cyan
-    Write-Host "  Installing ngrok" -ForegroundColor Cyan
+    Write-Host "  Installing ngrok (Testing Only)" -ForegroundColor Cyan
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host ""
 
     Write-Host "Installing ngrok inside VM..." -ForegroundColor Yellow
+
+    # Download and install ngrok
+    $installScript = @"
+#!/bin/bash
+set -e
+echo 'Downloading ngrok...'
+NGROK_VERSION='v3-stable'
+curl -sSL https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-\${NGROK_VERSION}-linux-amd64.tgz -o /tmp/ngrok.tgz
+tar -xzf /tmp/ngrok.tgz -C /usr/local/bin
+chmod +x /usr/local/bin/ngrok
+rm /tmp/ngrok.tgz
+echo '✓ ngrok installed: '\$(ngrok version)
+"@
+
     try {
-        multipass exec $VMName -- sudo install-ngrok
+        # Install ngrok binary
+        $installScript | multipass exec $VMName -- sudo bash
+
+        # Create start-ngrok-tunnel helper script
+        $tunnelScript = @"
+#!/bin/bash
+# Start ngrok tunnel for Headscale testing
+AUTHTOKEN='$NGROK_AUTHTOKEN'
+DOMAIN='$NGROK_DOMAIN'
+
+echo '=========================================='
+echo '  Starting ngrok tunnel'
+echo '=========================================='
+echo ''
+
+# Configure authtoken if not already done
+if [ ! -f ~/.ngrok2/ngrok.yml ]; then
+  echo 'Configuring ngrok authtoken...'
+  ngrok config add-authtoken '\$AUTHTOKEN'
+fi
+
+echo 'Tunnel configuration:'
+echo '  Domain: https://'\$DOMAIN
+echo '  Target: https://localhost:443'
+echo ''
+echo 'Starting tunnel... (Press Ctrl+C to stop)'
+echo ''
+
+# Start tunnel with static domain
+ngrok http --domain='\$DOMAIN' https://localhost:443
+"@
+
+        $tunnelScript | multipass exec $VMName -- sudo bash -c "cat > /usr/local/bin/start-ngrok-tunnel && chmod +x /usr/local/bin/start-ngrok-tunnel"
+
         Write-Host "✓ ngrok installed successfully!" -ForegroundColor Green
+        Write-Host "✓ start-ngrok-tunnel helper created" -ForegroundColor Green
     } catch {
         Write-Host "✗ Failed to install ngrok: $_" -ForegroundColor Red
-        Write-Host "  You can install it manually later with:" -ForegroundColor Yellow
-        Write-Host "  multipass exec $VMName -- sudo install-ngrok" -ForegroundColor Cyan
+        Write-Host "  You can install it manually with the commands above" -ForegroundColor Yellow
     }
 }
 
