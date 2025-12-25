@@ -249,8 +249,8 @@ function Show-NgrokInfo {
     Write-Host ""
 
     Write-Host "ngrok will be installed inside the VM with:" -ForegroundColor Yellow
-    Write-Host "  Authtoken: $NgrokAuthToken" -ForegroundColor White
-    Write-Host "  Domain:    https://$NgrokDomain" -ForegroundColor White
+    Write-Host "  Authtoken: $($options.NgrokAuthToken)" -ForegroundColor White
+    Write-Host "  Domain:    https://$($options.NgrokDomain)" -ForegroundColor White
     Write-Host ""
     Write-Host "After deployment, you'll start ngrok from inside the VM." -ForegroundColor Yellow
     Write-Host ""
@@ -268,22 +268,22 @@ function Start-MultipassVM {
     Write-Host ""
 
     Write-Host "VM Configuration:" -ForegroundColor Yellow
-    Write-Host "  Name:    $VMName" -ForegroundColor White
-    Write-Host "  Memory:  $Memory" -ForegroundColor White
-    Write-Host "  Disk:    $Disk" -ForegroundColor White
-    Write-Host "  CPUs:    $CPUs" -ForegroundColor White
-    Write-Host "  Network: $Network" -ForegroundColor White
+    Write-Host "  Name:    $($options.VMName)" -ForegroundColor White
+    Write-Host "  Memory:  $($options.Memory)" -ForegroundColor White
+    Write-Host "  Disk:    $($options.Disk)" -ForegroundColor White
+    Write-Host "  CPUs:    $($options.CPUs)" -ForegroundColor White
+    Write-Host "  Network: $($options.Network)" -ForegroundColor White
     Write-Host ""
 
     # Check if VM already exists
     try {
-        $existingVM = multipass list | Select-String $VMName
+        $existingVM = multipass list | Select-String $options.VMName
         if ($existingVM) {
-            Write-Host "VM '$VMName' already exists!" -ForegroundColor Yellow
+            Write-Host "VM '$($options.VMName)' already exists!" -ForegroundColor Yellow
             $overwrite = Read-Host "Delete and recreate? [y/N]"
             if ($overwrite -eq 'y' -or $overwrite -eq 'Y') {
                 Write-Host "Deleting existing VM..." -ForegroundColor Yellow
-                multipass delete $VMName
+                multipass delete $options.VMName
                 multipass purge
             } else {
                 Write-Host "Deployment cancelled." -ForegroundColor Yellow
@@ -297,12 +297,12 @@ function Start-MultipassVM {
     Write-Host "Launching VM (this may take several minutes)..." -ForegroundColor Yellow
 
     try {
-        multipass launch --name $VMName `
+        multipass launch --name $options.VMName `
             --cloud-init .\cloud-init.yml `
-            --memory $Memory `
-            --disk $Disk `
-            --cpus $CPUs `
-            --network $Network `
+            --memory $options.Memory `
+            --disk $options.Disk `
+            --cpus $options.CPUs `
+            --network $options.Network `
             22.04
 
         Write-Host "✓ VM launched successfully!" -ForegroundColor Green
@@ -313,7 +313,7 @@ function Start-MultipassVM {
 
     # Get VM IP
     Start-Sleep -Seconds 5
-    $vmInfo = multipass info $VMName
+    $vmInfo = multipass info $options.VMName
     $ipMatch = $vmInfo | Select-String "IPv4:\s+(\d+\.\d+\.\d+\.\d+)"
     if ($ipMatch) {
         $vmIP = $ipMatch.Matches.Groups[1].Value
@@ -410,8 +410,8 @@ echo '✓ ngrok installed: '\$(ngrok version)
         $tunnelScript = @"
 #!/bin/bash
 # Start ngrok tunnel for Headscale testing
-AUTHTOKEN='$NgrokAuthToken'
-DOMAIN='$NgrokDomain'
+AUTHTOKEN='$($options.NgrokAuthToken)'
+DOMAIN='$($options.NgrokDomain)'
 
 echo '=========================================='
 echo '  Starting ngrok tunnel'
@@ -476,7 +476,7 @@ function Show-DeploymentSummary {
     Write-Host ""
     Write-Host "1. Start ngrok tunnel (in a separate terminal):" -ForegroundColor Yellow
     Write-Host "   multipass exec $VMName -- start-ngrok-tunnel" -ForegroundColor White
-    Write-Host "   This creates the tunnel: https://$NgrokDomain -> VM:443" -ForegroundColor Cyan
+    Write-Host "   This creates the tunnel: https://$($options.NgrokDomain) -> VM:443" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "2. Verify Headplane is running:" -ForegroundColor Yellow
     Write-Host "   multipass exec $VMName -- systemctl status headplane" -ForegroundColor White
@@ -549,17 +549,8 @@ See TESTING.md for full documentation.
             }
         }
 
-        # Get infrastructure configuration
-        $options = Get-Config -CliOptions $cliOptions -ConfigFilePath $configPath -RequiredArgs $infraRequiredArgs
-
-        # Extract values for use in script
-        $script:VMName = $options.VMName
-        $script:Memory = $options.Memory
-        $script:Disk = $options.Disk
-        $script:CPUs = $options.CPUs
-        $script:Network = $options.Network
-        $script:NgrokAuthToken = $options.NgrokAuthToken
-        $script:NgrokDomain = $options.NgrokDomain
+        # Get infrastructure configuration (script-scoped for use in functions)
+        $script:options = Get-Config -CliOptions $cliOptions -ConfigFilePath $configPath -RequiredArgs $infraRequiredArgs
 
         # Prerequisites
         Test-Prerequisites
@@ -628,16 +619,16 @@ See TESTING.md for full documentation.
         $vmIP = Start-MultipassVM
 
         # Monitor deployment (waits for cloud-init)
-        Watch-Deployment -VMName $VMName
+        Watch-Deployment -VMName $options.VMName
 
         # Configure Headscale after cloud-init completes
-        Configure-Headscale -VMName $VMName -Config $config
+        Configure-Headscale -VMName $options.VMName -Config $config
 
         # Install ngrok after configuration
-        Install-Ngrok -VMName $VMName
+        Install-Ngrok -VMName $options.VMName
 
         # Show summary
-        Show-DeploymentSummary -VMName $VMName -VMIP $vmIP -Config $config
+        Show-DeploymentSummary -VMName $options.VMName -VMIP $vmIP -Config $config
 
         # Save complete config for future use (merge VM/ngrok options with Headscale config)
         $fullConfig = $options.Clone()
