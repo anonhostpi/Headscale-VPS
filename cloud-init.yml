@@ -130,10 +130,16 @@ write_files:
       }
 
       # Validate email address format
-      # TODO: Regex is too permissive - accepts user@@example.com
+      # RFC 5322 compliant (simplified) - validates local@domain.tld format
       validate_email() {
         local email="$1"
-        [[ "$email" =~ ^[^@]+@[^@]+\.[^@]+$ ]]
+        # Pattern breakdown:
+        # ^[a-zA-Z0-9._%+-]+  - Local part: alphanumeric, dots, underscores, percent, plus, hyphen
+        # @                   - Single @ symbol
+        # [a-zA-Z0-9.-]+      - Domain: alphanumeric, dots, hyphens
+        # \.                  - Dot before TLD
+        # [a-zA-Z]{2,}$       - TLD: at least 2 letters
+        [[ "$email" =~ ^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$ ]]
       }
 
       # Validate UUID or Azure tenant ID
@@ -298,11 +304,18 @@ write_files:
         chmod 700 "$credstore"
 
         # Encrypt the secret
-        if systemd-creds encrypt --name="$cred_name" "$plain_file" "$encrypted_file" 2>/dev/null; then
+        local encrypt_output encrypt_error
+        encrypt_output=$(systemd-creds encrypt --name="$cred_name" "$plain_file" "$encrypted_file" 2>&1)
+        encrypt_error=$?
+
+        if [ $encrypt_error -eq 0 ]; then
           chmod 600 "$encrypted_file"
           print_success "Encrypted $cred_name using systemd-creds"
         else
           print_warning "Failed to encrypt $cred_name, using plaintext"
+          if [ -n "$encrypt_output" ]; then
+            echo "  Error details: $encrypt_output" >&2
+          fi
         fi
       }
 
@@ -340,7 +353,22 @@ write_files:
             return 1
           fi
           
-          API_KEY=$(headscale apikeys create --expiration 90d 2>/dev/null | tail -1)
+          local api_create_output api_create_error
+          api_create_output=$(headscale apikeys create --expiration 90d 2>&1)
+          api_create_error=$?
+
+          if [ $api_create_error -ne 0 ]; then
+            print_error "Failed to create API key"
+            echo "  Error details: $api_create_output" >&2
+            return 1
+          fi
+
+          API_KEY=$(echo "$api_create_output" | tail -1)
+          if [ -z "$API_KEY" ]; then
+            print_error "API key creation returned empty result"
+            return 1
+          fi
+
           local api_key_file="/var/lib/headscale/api_key"
           echo -n "$API_KEY" > "$api_key_file"
           chown headscale:headscale "$api_key_file"
@@ -997,11 +1025,18 @@ write_files:
         chmod 700 "$CREDSTORE"
 
         # Encrypt the secret
-        if systemd-creds encrypt --name="$cred_name" "$plain_file" "$encrypted_file" 2>/dev/null; then
+        local encrypt_output encrypt_error
+        encrypt_output=$(systemd-creds encrypt --name="$cred_name" "$plain_file" "$encrypted_file" 2>&1)
+        encrypt_error=$?
+
+        if [ $encrypt_error -eq 0 ]; then
           chmod 600 "$encrypted_file"
           print_success "Encrypted $cred_name using systemd-creds"
         else
           print_warning "Failed to encrypt $cred_name, using plaintext"
+          if [ -n "$encrypt_output" ]; then
+            echo "  Error details: $encrypt_output" >&2
+          fi
         fi
       }
 
@@ -1014,10 +1049,21 @@ write_files:
       fi
       
       # Create new API key
-      NEW_KEY=$(headscale apikeys create --expiration 90d 2>/dev/null | tail -1)
-      
-      if [ -z "$NEW_KEY" ]; then
+      local api_create_output api_create_error
+      api_create_output=$(headscale apikeys create --expiration 90d 2>&1)
+      api_create_error=$?
+
+      if [ $api_create_error -ne 0 ]; then
         echo -e "${RED}[ERROR]${NC} Failed to create new API key"
+        echo "  Error details: $api_create_output" >&2
+        exit 1
+      fi
+
+      NEW_KEY=$(echo "$api_create_output" | tail -1)
+
+      if [ -z "$NEW_KEY" ]; then
+        echo -e "${RED}[ERROR]${NC} API key creation returned empty result"
+        echo "  Output: $api_create_output" >&2
         exit 1
       fi
       
@@ -1049,14 +1095,31 @@ write_files:
 
       # Expire old API keys (keeps only the newest)
       echo "Expiring old API keys..."
-      headscale apikeys list -o json 2>/dev/null | \
-        jq -r --arg newkey "$NEW_KEY" '.[] | select(.key != $newkey) | .prefix' | \
-        while read -r prefix; do
-          if [ -n "$prefix" ]; then
-            headscale apikeys expire --prefix "$prefix" 2>/dev/null && \
-              echo -e "${YELLOW}[!!]${NC} Expired old key: $prefix"
-          fi
-        done
+      local list_output list_error
+      list_output=$(headscale apikeys list -o json 2>&1)
+      list_error=$?
+
+      if [ $list_error -ne 0 ]; then
+        echo -e "${YELLOW}[!!]${NC} Warning: Could not list API keys for cleanup"
+        echo "  Error details: $list_output" >&2
+      else
+        echo "$list_output" | \
+          jq -r --arg newkey "$NEW_KEY" '.[] | select(.key != $newkey) | .prefix' | \
+          while read -r prefix; do
+            if [ -n "$prefix" ]; then
+              local expire_output expire_error
+              expire_output=$(headscale apikeys expire --prefix "$prefix" 2>&1)
+              expire_error=$?
+
+              if [ $expire_error -eq 0 ]; then
+                echo -e "${YELLOW}[!!]${NC} Expired old key: $prefix"
+              else
+                echo -e "${YELLOW}[!!]${NC} Warning: Failed to expire key $prefix"
+                echo "  Error details: $expire_output" >&2
+              fi
+            fi
+          done
+      fi
 
       echo ""
       echo "Rotation complete. New key expires: $(cat $API_KEY_EXPIRES)"
@@ -1490,11 +1553,18 @@ write_files:
         chmod 700 "$CREDSTORE"
 
         # Encrypt the secret
-        if systemd-creds encrypt --name="$cred_name" "$plain_file" "$encrypted_file" 2>/dev/null; then
+        local encrypt_output encrypt_error
+        encrypt_output=$(systemd-creds encrypt --name="$cred_name" "$plain_file" "$encrypted_file" 2>&1)
+        encrypt_error=$?
+
+        if [ $encrypt_error -eq 0 ]; then
           chmod 600 "$encrypted_file"
           print_success "Encrypted $cred_name using systemd-creds"
         else
           print_warning "Failed to encrypt $cred_name, using plaintext"
+          if [ -n "$encrypt_output" ]; then
+            echo "  Error details: $encrypt_output" >&2
+          fi
         fi
       }
 

@@ -30,6 +30,8 @@ Production-ready deployment of [Headscale](https://github.com/juanfont/headscale
 - **Email Notifications** - Alerts for updates, fail2ban bans, and reboots (via M365 SMTP)
 - **Health Monitoring** - Systemd timer runs comprehensive checks every 5 minutes
 - **Checksum Verification** - All downloads (NVM, Headscale, Caddy) verified before installation
+- **Error Handling** - Comprehensive error logging with context, no silent failures
+- **Input Validation** - RFC 5322 compliant email validation, domain validation, UUID validation
 
 ## Quick Start
 
