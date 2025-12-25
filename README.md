@@ -80,10 +80,7 @@ sudo msmtp-config
 
 ### Azure AD Setup
 
-See the deployed documentation on your server:
-```bash
-cat /etc/headscale/AZURE_AD_SETUP.md
-```
+Complete setup guide: [AZURE_AD_SETUP.md](AZURE_AD_SETUP.md)
 
 **Quick overview:**
 1. Create Azure AD App Registration
@@ -92,6 +89,8 @@ cat /etc/headscale/AZURE_AD_SETUP.md
    - `https://YOUR_DOMAIN/admin/oidc/callback`
 3. Create client secret (save immediately!)
 4. Run `sudo headscale-config` with the credentials
+
+See [AZURE_AD_SETUP.md](AZURE_AD_SETUP.md) for detailed step-by-step instructions and troubleshooting.
 
 ### Connect Tailscale Clients
 
