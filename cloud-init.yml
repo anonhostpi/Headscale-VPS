@@ -27,42 +27,23 @@ packages:
 
 write_files:
   # =========================================================================
-  # SSH Hardening Configuration
+  # Version Configuration (MUST BE FIRST - other scripts depend on this)
   # =========================================================================
-  - path: /etc/ssh/sshd_config.d/99-hardening.conf
+  - path: /etc/headscale/versions.conf
     permissions: "0644"
     content: |
-      # Security hardening - SSH keys required
-      PasswordAuthentication no
-      ChallengeResponseAuthentication no
-      PermitRootLogin no
-      MaxAuthTries 3
-      LoginGraceTime 20
-      X11Forwarding no
-      PermitEmptyPasswords no
-      ClientAliveInterval 300
-      ClientAliveCountMax 2
+      # Headscale VPS Version Configuration
+      # Edit these values to pin specific versions
+      # Leave empty to use latest releases
 
-  # =========================================================================
-  # Kernel Hardening (sysctl)
-  # =========================================================================
-  - path: /etc/sysctl.d/99-security.conf
-    permissions: "0644"
-    content: |
-      # Network hardening
-      net.ipv4.conf.all.rp_filter = 1
-      net.ipv4.conf.default.rp_filter = 1
-      net.ipv4.conf.all.accept_source_route = 0
-      net.ipv6.conf.all.accept_source_route = 0
-      net.ipv4.conf.all.accept_redirects = 0
-      net.ipv6.conf.all.accept_redirects = 0
-      net.ipv4.conf.all.send_redirects = 0
-      net.ipv4.tcp_syncookies = 1
-      net.ipv4.conf.all.log_martians = 1
-      net.ipv4.icmp_echo_ignore_broadcasts = 1
-      net.ipv4.icmp_ignore_bogus_error_responses = 1
-      kernel.dmesg_restrict = 1
-      kernel.kptr_restrict = 2
+      # Node.js LTS version for Headplane (via nvm)
+      NODE_VERSION="22"
+
+      # Headplane version (git tag, e.g., "v0.6.0" or "main" for latest)
+      HEADPLANE_VERSION=""
+
+      # Headscale version (leave empty for latest)
+      HEADSCALE_VERSION=""
 
   # =========================================================================
   # Shared Libraries (eliminate code duplication)
@@ -123,23 +104,42 @@ write_files:
       }
 
   # =========================================================================
-  # Version Configuration (edit these to pin specific versions)
+  # SSH Hardening Configuration
   # =========================================================================
-  - path: /etc/headscale/versions.conf
+  - path: /etc/ssh/sshd_config.d/99-hardening.conf
     permissions: "0644"
     content: |
-      # Headscale VPS Version Configuration
-      # Edit these values to pin specific versions
-      # Leave empty to use latest releases
+      # Security hardening - SSH keys required
+      PasswordAuthentication no
+      ChallengeResponseAuthentication no
+      PermitRootLogin no
+      MaxAuthTries 3
+      LoginGraceTime 20
+      X11Forwarding no
+      PermitEmptyPasswords no
+      ClientAliveInterval 300
+      ClientAliveCountMax 2
 
-      # Node.js LTS version for Headplane (via nvm)
-      NODE_VERSION="22"
-
-      # Headplane version (git tag, e.g., "v0.6.0" or "main" for latest)
-      HEADPLANE_VERSION=""
-
-      # Headscale version (leave empty for latest)
-      HEADSCALE_VERSION=""
+  # =========================================================================
+  # Kernel Hardening (sysctl)
+  # =========================================================================
+  - path: /etc/sysctl.d/99-security.conf
+    permissions: "0644"
+    content: |
+      # Network hardening
+      net.ipv4.conf.all.rp_filter = 1
+      net.ipv4.conf.default.rp_filter = 1
+      net.ipv4.conf.all.accept_source_route = 0
+      net.ipv6.conf.all.accept_source_route = 0
+      net.ipv4.conf.all.accept_redirects = 0
+      net.ipv6.conf.all.accept_redirects = 0
+      net.ipv4.conf.all.send_redirects = 0
+      net.ipv4.tcp_syncookies = 1
+      net.ipv4.conf.all.log_martians = 1
+      net.ipv4.icmp_echo_ignore_broadcasts = 1
+      net.ipv4.icmp_ignore_bogus_error_responses = 1
+      kernel.dmesg_restrict = 1
+      kernel.kptr_restrict = 2
 
   # =========================================================================
   # Azure AD Setup Documentation (single source of truth)
