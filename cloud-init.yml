@@ -56,8 +56,47 @@ packages:
   - msmtp-mta
   - unattended-upgrades
   - apt-listchanges
+  - auditd
 
 write_files:
+  # =========================================================================
+  # SSH Hardening Configuration
+  # =========================================================================
+  - path: /etc/ssh/sshd_config.d/99-hardening.conf
+    permissions: "0644"
+    content: |
+      # Security hardening - SSH keys required
+      PasswordAuthentication no
+      ChallengeResponseAuthentication no
+      PermitRootLogin no
+      MaxAuthTries 3
+      LoginGraceTime 20
+      X11Forwarding no
+      PermitEmptyPasswords no
+      ClientAliveInterval 300
+      ClientAliveCountMax 2
+
+  # =========================================================================
+  # Kernel Hardening (sysctl)
+  # =========================================================================
+  - path: /etc/sysctl.d/99-security.conf
+    permissions: "0644"
+    content: |
+      # Network hardening
+      net.ipv4.conf.all.rp_filter = 1
+      net.ipv4.conf.default.rp_filter = 1
+      net.ipv4.conf.all.accept_source_route = 0
+      net.ipv6.conf.all.accept_source_route = 0
+      net.ipv4.conf.all.accept_redirects = 0
+      net.ipv6.conf.all.accept_redirects = 0
+      net.ipv4.conf.all.send_redirects = 0
+      net.ipv4.tcp_syncookies = 1
+      net.ipv4.conf.all.log_martians = 1
+      net.ipv4.icmp_echo_ignore_broadcasts = 1
+      net.ipv4.icmp_ignore_bogus_error_responses = 1
+      kernel.dmesg_restrict = 1
+      kernel.kptr_restrict = 2
+
   # =========================================================================
   # Version Configuration (edit these to pin specific versions)
   # =========================================================================
@@ -809,7 +848,13 @@ write_files:
       LockPersonality=true
       MemoryDenyWriteExecute=true
       RestrictRealtime=true
-      
+      CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+      SystemCallFilter=@system-service
+      SystemCallArchitectures=native
+      PrivateDevices=true
+      ProtectClock=true
+      ProtectHostname=true
+
       [Install]
       WantedBy=multi-user.target
 
@@ -851,7 +896,13 @@ write_files:
       RestrictNamespaces=true
       LockPersonality=true
       RestrictRealtime=true
-      
+      CapabilityBoundingSet=
+      SystemCallFilter=@system-service @pkey
+      SystemCallArchitectures=native
+      PrivateDevices=true
+      ProtectClock=true
+      ProtectHostname=true
+
       [Install]
       WantedBy=multi-user.target
 
@@ -1495,6 +1546,35 @@ write_files:
       action = %(action_)s
                msmtp-mail[name=Headscale-AuthKey]
 
+  # Recidive jail - longer bans for repeat offenders
+  - path: /etc/fail2ban/jail.d/recidive.conf
+    permissions: "0644"
+    content: |
+      [recidive]
+      enabled = true
+      filter = recidive
+      logpath = /var/log/fail2ban.log
+      action = %(action_)s
+               msmtp-mail[name=Recidive]
+      bantime = 1w
+      findtime = 1d
+      maxretry = 3
+
+  # =========================================================================
+  # Auditd Rules (config and secret monitoring)
+  # =========================================================================
+  - path: /etc/audit/rules.d/headscale.rules
+    permissions: "0644"
+    content: |
+      # Monitor config changes
+      -w /etc/headscale/ -p wa -k headscale_config
+      -w /etc/headplane/ -p wa -k headplane_config
+      -w /etc/caddy/ -p wa -k caddy_config
+
+      # Monitor secret access
+      -w /var/lib/headscale/api_key -p r -k api_key_access
+      -w /var/lib/headscale/oidc_client_secret -p r -k oidc_secret_access
+
   # =========================================================================
   # Setup Script (runs once during cloud-init)
   # =========================================================================
@@ -1629,20 +1709,34 @@ write_files:
       
       SETUP_STAGE="services"
       # Enable services (but don't start yet - need configuration)
-      echo "[7/8] Enabling services..."
+      echo "[7/10] Enabling services..."
       systemctl daemon-reload
       systemctl enable headscale
       systemctl enable caddy
       systemctl enable fail2ban
-      
+
       # Start fail2ban (doesn't need configuration)
       systemctl start fail2ban
-      
+
+      SETUP_STAGE="hardening"
+      # Apply kernel hardening
+      echo "[8/10] Applying kernel hardening..."
+      sysctl --system
+
+      # Restart SSH with hardened config
+      echo "[9/10] Restarting SSH with hardened config..."
+      systemctl restart sshd
+
+      # Enable auditd
+      echo "[10/10] Enabling audit logging..."
+      systemctl enable auditd
+      systemctl start auditd
+
       # Clear trap - setup successful
       trap - ERR
-      
+
       # Final message
-      echo "[8/8] Setup complete!"
+      echo "Setup complete!"
       echo ""
       echo "=========================================="
       echo "  Next Steps"
