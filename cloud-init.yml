@@ -1,6 +1,6 @@
 #cloud-config
 # Headscale + Headplane VPS - Production Deployment
-# Full documentation: https://github.com/your-repo/headscale-vps/blob/main/README.md
+# Full documentation: https://github.com/anonhostpi/Headscale-VPS/blob/main/README.md
 
 package_update: true
 package_upgrade: false  # Disabled to prevent uncontrolled updates - use controlled update script instead

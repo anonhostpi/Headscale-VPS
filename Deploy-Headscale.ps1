@@ -6,7 +6,7 @@
 .DESCRIPTION
     Automates Headscale + Headplane deployment to Multipass VM with complete
     configuration coverage and ngrok integration for OAuth testing.
-    Full documentation: https://github.com/your-repo/headscale-vps/blob/main/TESTING.md
+    Full documentation: https://github.com/anonhostpi/Headscale-VPS/blob/main/TESTING.md
 
 .EXAMPLE
     .\Deploy-Headscale.ps1

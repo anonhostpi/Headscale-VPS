@@ -43,7 +43,7 @@ Production-ready deployment of [Headscale](https://github.com/juanfont/headscale
 
 ```bash
 # Download cloud-init.yml
-wget https://raw.githubusercontent.com/your-repo/headscale-vps/main/cloud-init.yml
+wget https://raw.githubusercontent.com/anonhostpi/Headscale-VPS/main/cloud-init.yml
 
 # Deploy to a new Ubuntu 22.04 instance
 # (Method varies by hosting provider - see examples below)
