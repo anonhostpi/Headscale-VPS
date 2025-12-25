@@ -42,6 +42,11 @@ write_files:
       # Pinned to specific versions for security and reproducibility
       # Update these values carefully and test before deploying to production
 
+      # NVM (Node Version Manager)
+      # Version from: https://github.com/nvm-sh/nvm/releases
+      NVM_VERSION="v0.40.1"
+      NVM_SHA256="d9835a30ce722c9dc8590e47e5ff8dcb89dd3f977c0c176f719745e84757381a"
+
       # Node.js LTS version for Headplane (via nvm)
       # Format: Major.Minor.Patch (e.g., "22.11.0")
       NODE_VERSION="22.11.0"
@@ -57,6 +62,53 @@ write_files:
       # Headscale version (from https://github.com/juanfont/headscale/releases)
       # Format: "X.Y.Z" without 'v' prefix (e.g., "0.23.0") or empty for latest
       HEADSCALE_VERSION="0.23.0"
+
+  # =========================================================================
+  # Constants Configuration (centralized timeouts and thresholds)
+  # =========================================================================
+  - path: /etc/headscale/constants.conf
+    permissions: "0644"
+    content: |
+      # Headscale VPS Constants Configuration
+      # Centralized timeouts, thresholds, and magic numbers
+      # Update these values carefully and test before deploying to production
+
+      # API Key Management
+      readonly API_KEY_EXPIRATION_DAYS=90
+      readonly API_KEY_WARNING_THRESHOLD_DAYS=14
+
+      # Systemd
+      readonly SYSTEMD_MIN_VERSION=250
+
+      # Service Startup
+      readonly SERVICE_START_RETRY_COUNT=30
+      readonly SERVICE_START_RETRY_DELAY=1  # seconds
+
+      # Health Check Thresholds
+      readonly CERT_EXPIRY_WARNING_DAYS=14
+      readonly DISK_WARNING_THRESHOLD_PCT=80
+
+      # Fail2ban Configuration
+      readonly FAIL2BAN_SSH_MAXRETRY=4
+      readonly FAIL2BAN_SSH_FINDTIME="10m"
+      readonly FAIL2BAN_SSH_BANTIME="24h"
+
+      readonly FAIL2BAN_OIDC_MAXRETRY=5
+      readonly FAIL2BAN_OIDC_FINDTIME="10m"
+      readonly FAIL2BAN_OIDC_BANTIME="12h"
+
+      readonly FAIL2BAN_AUTHKEY_MAXRETRY=5
+      readonly FAIL2BAN_AUTHKEY_FINDTIME="10m"
+      readonly FAIL2BAN_AUTHKEY_BANTIME="12h"
+
+      readonly FAIL2BAN_RECIDIVE_MAXRETRY=3
+      readonly FAIL2BAN_RECIDIVE_FINDTIME="1d"
+      readonly FAIL2BAN_RECIDIVE_BANTIME="1w"
+
+      # Logging
+      readonly LOG_ROTATION_DAYS=7
+      readonly CADDY_LOG_SIZE="10mb"
+      readonly CADDY_LOG_KEEP=5
 
   # =========================================================================
   # APT Preferences (package pinning for stability)
@@ -150,6 +202,113 @@ write_files:
       }
 
   # =========================================================================
+  # Secrets Management Library (eliminates code duplication)
+  # =========================================================================
+  - path: /usr/local/lib/headscale-secrets.sh
+    permissions: "0644"
+    content: |
+      #!/bin/bash
+      # secrets.sh - Shared secret management functions for Headscale VPS
+      # Provides systemd-creds encryption with graceful degradation
+
+      # Constants
+      readonly SYSTEMD_MIN_VERSION=250
+      readonly CREDSTORE_DIR="/etc/credstore.encrypted"
+
+      # Check if systemd supports credential encryption
+      # Returns: 0 if supported, 1 if not
+      check_systemd_creds_support() {
+        # Check if systemd-creds command exists
+        if ! command -v systemd-creds >/dev/null 2>&1; then
+          return 1
+        fi
+
+        # Check systemd version (need 250+)
+        local systemd_version
+        systemd_version=$(systemctl --version | head -n1 | awk '{print $2}')
+
+        if [ -z "$systemd_version" ]; then
+          return 1
+        fi
+
+        if [ "$systemd_version" -lt "$SYSTEMD_MIN_VERSION" ]; then
+          return 1
+        fi
+
+        return 0
+      }
+
+      # Encrypt a secret file using systemd-creds (if supported)
+      # Args:
+      #   $1 - Path to plaintext secret file
+      #   $2 - Credential name (used in systemd service files)
+      # Returns: 0 on success or graceful fallback, 1 on error
+      encrypt_secret_if_supported() {
+        local plain_file="$1"
+        local cred_name="$2"
+        local encrypted_file="$CREDSTORE_DIR/${cred_name}.cred"
+
+        # Validate inputs
+        if [ -z "$plain_file" ] || [ -z "$cred_name" ]; then
+          echo "Error: encrypt_secret_if_supported() requires 2 arguments" >&2
+          return 1
+        fi
+
+        if [ ! -f "$plain_file" ]; then
+          echo "Error: Secret file not found: $plain_file" >&2
+          return 1
+        fi
+
+        # Check if systemd-creds is supported
+        if ! check_systemd_creds_support; then
+          # Graceful degradation - use plaintext with 600 permissions
+          chmod 600 "$plain_file"
+          return 0
+        fi
+
+        # Create credstore directory if it doesn't exist
+        mkdir -p "$CREDSTORE_DIR"
+        chmod 700 "$CREDSTORE_DIR"
+
+        # Encrypt the secret
+        local encrypt_output encrypt_error
+        encrypt_output=$(systemd-creds encrypt --name="$cred_name" "$plain_file" "$encrypted_file" 2>&1)
+        encrypt_error=$?
+
+        if [ $encrypt_error -eq 0 ]; then
+          chmod 600 "$encrypted_file"
+
+          # Use print_success if available (from headscale-common.sh)
+          if command -v print_success >/dev/null 2>&1; then
+            print_success "Encrypted $cred_name using systemd-creds"
+          else
+            echo "[OK] Encrypted $cred_name using systemd-creds"
+          fi
+
+          return 0
+        else
+          # Encryption failed - fall back to plaintext
+          if command -v print_warning >/dev/null 2>&1; then
+            print_warning "Failed to encrypt $cred_name, using plaintext"
+          else
+            echo "[WARNING] Failed to encrypt $cred_name, using plaintext"
+          fi
+
+          if [ -n "$encrypt_output" ]; then
+            echo "  Error details: $encrypt_output" >&2
+          fi
+
+          chmod 600 "$plain_file"
+          return 0
+        fi
+      }
+
+      # Get systemd version (for debugging/info purposes)
+      get_systemd_version() {
+        systemctl --version | head -n1 | awk '{print $2}'
+      }
+
+  # =========================================================================
   # SSH Hardening Configuration
   # =========================================================================
   - path: /etc/ssh/sshd_config.d/99-hardening.conf
@@ -199,6 +358,8 @@ write_files:
       # Load shared libraries
       source /usr/local/lib/headscale-common.sh
       source /usr/local/lib/headscale-validators.sh
+      source /usr/local/lib/headscale-secrets.sh
+      source /etc/headscale/constants.conf
 
       ENV_FILE="/etc/environment.d/headscale.conf"
       TEMPLATES_DIR="/etc/headscale/templates"
@@ -281,43 +442,6 @@ write_files:
         chmod 600 "$ENV_FILE"
         print_success "Environment file written to $ENV_FILE"
       }
-      
-      # Encrypt a secret file using systemd-creds (if supported)
-      encrypt_secret_if_supported() {
-        local plain_file="$1"
-        local cred_name="$2"
-        local credstore="/etc/credstore.encrypted"
-        local encrypted_file="$credstore/${cred_name}.cred"
-
-        # Check if systemd-creds is available (systemd 250+)
-        if ! command -v systemd-creds >/dev/null 2>&1; then
-          return 0  # Skip encryption, use plaintext
-        fi
-
-        local systemd_version=$(systemctl --version | head -n1 | awk '{print $2}')
-        if [ "$systemd_version" -lt 250 ]; then
-          return 0  # Skip encryption, use plaintext
-        fi
-
-        # Create credstore directory if it doesn't exist
-        mkdir -p "$credstore"
-        chmod 700 "$credstore"
-
-        # Encrypt the secret
-        local encrypt_output encrypt_error
-        encrypt_output=$(systemd-creds encrypt --name="$cred_name" "$plain_file" "$encrypted_file" 2>&1)
-        encrypt_error=$?
-
-        if [ $encrypt_error -eq 0 ]; then
-          chmod 600 "$encrypted_file"
-          print_success "Encrypted $cred_name using systemd-creds"
-        else
-          print_warning "Failed to encrypt $cred_name, using plaintext"
-          if [ -n "$encrypt_output" ]; then
-            echo "  Error details: $encrypt_output" >&2
-          fi
-        fi
-      }
 
       # Write secret files
       write_secrets() {
@@ -338,23 +462,23 @@ write_files:
           # Start headscale and wait for it to be ready
           systemctl start headscale
           
-          # Wait for Headscale to be responsive (up to 30 seconds)
-          local retries=30
+          # Wait for Headscale to be responsive
+          local retries=${SERVICE_START_RETRY_COUNT}
           while [ $retries -gt 0 ]; do
             if headscale users list >/dev/null 2>&1; then
               break
             fi
-            sleep 1
+            sleep ${SERVICE_START_RETRY_DELAY}
             retries=$((retries - 1))
           done
-          
+
           if [ $retries -eq 0 ]; then
-            print_error "Headscale failed to start within 30 seconds"
+            print_error "Headscale failed to start within ${SERVICE_START_RETRY_COUNT} seconds"
             return 1
           fi
           
           local api_create_output api_create_error
-          api_create_output=$(headscale apikeys create --expiration 90d 2>&1)
+          api_create_output=$(headscale apikeys create --expiration ${API_KEY_EXPIRATION_DAYS}d 2>&1)
           api_create_error=$?
 
           if [ $api_create_error -ne 0 ]; then
@@ -374,10 +498,10 @@ write_files:
           chown headscale:headscale "$api_key_file"
           chmod 600 "$api_key_file"
           # Record expiration date for rotation tracking
-          date -d "+90 days" +%Y-%m-%d > /var/lib/headscale/api_key_expires
+          date -d "+${API_KEY_EXPIRATION_DAYS} days" +%Y-%m-%d > /var/lib/headscale/api_key_expires
           chown headscale:headscale /var/lib/headscale/api_key_expires
           chmod 600 /var/lib/headscale/api_key_expires
-          print_success "Headscale API key generated (expires in 90 days)"
+          print_success "Headscale API key generated (expires in ${API_KEY_EXPIRATION_DAYS} days)"
 
           # Encrypt the API key for systemd-creds
           encrypt_secret_if_supported "$api_key_file" "headscale_api_key"
@@ -388,7 +512,7 @@ write_files:
             local expires=$(cat /var/lib/headscale/api_key_expires)
             local today=$(date +%Y-%m-%d)
             local days_left=$(( ($(date -d "$expires" +%s) - $(date -d "$today" +%s)) / 86400 ))
-            if [ $days_left -lt 14 ]; then
+            if [ $days_left -lt ${API_KEY_WARNING_THRESHOLD_DAYS} ]; then
               print_warning "API key expires in $days_left days - run 'sudo headscale-rotate-apikey' to renew"
             fi
           fi
@@ -875,8 +999,7 @@ write_files:
       mkdir -p "$NVM_DIR"
 
       # Download NVM with checksum verification (prevents supply chain attacks)
-      NVM_VERSION="v0.40.1"
-      NVM_SHA256="d9835a30ce722c9dc8590e47e5ff8dcb89dd3f977c0c176f719745e84757381a"
+      # NVM_VERSION and NVM_SHA256 loaded from versions.conf
       NVM_INSTALL_SCRIPT="/tmp/nvm-install-${NVM_VERSION}.sh"
 
       curl -sSL "https://raw.githubusercontent.com/nvm-sh/nvm/${NVM_VERSION}/install.sh" -o "$NVM_INSTALL_SCRIPT"
@@ -998,47 +1121,13 @@ write_files:
 
       # Load shared libraries
       source /usr/local/lib/headscale-common.sh
+      source /usr/local/lib/headscale-secrets.sh
+      source /etc/headscale/constants.conf
 
       API_KEY_FILE="/var/lib/headscale/api_key"
       API_KEY_EXPIRES="/var/lib/headscale/api_key_expires"
       HEADPLANE_CONFIG="/etc/headplane/config.yaml"
       CREDSTORE="/etc/credstore.encrypted"
-
-      # Encrypt a secret file using systemd-creds (if supported)
-      encrypt_secret_if_supported() {
-        local plain_file="$1"
-        local cred_name="$2"
-        local encrypted_file="$CREDSTORE/${cred_name}.cred"
-
-        # Check if systemd-creds is available (systemd 250+)
-        if ! command -v systemd-creds >/dev/null 2>&1; then
-          return 0  # Skip encryption, use plaintext
-        fi
-
-        local systemd_version=$(systemctl --version | head -n1 | awk '{print $2}')
-        if [ "$systemd_version" -lt 250 ]; then
-          return 0  # Skip encryption, use plaintext
-        fi
-
-        # Create credstore directory if it doesn't exist
-        mkdir -p "$CREDSTORE"
-        chmod 700 "$CREDSTORE"
-
-        # Encrypt the secret
-        local encrypt_output encrypt_error
-        encrypt_output=$(systemd-creds encrypt --name="$cred_name" "$plain_file" "$encrypted_file" 2>&1)
-        encrypt_error=$?
-
-        if [ $encrypt_error -eq 0 ]; then
-          chmod 600 "$encrypted_file"
-          print_success "Encrypted $cred_name using systemd-creds"
-        else
-          print_warning "Failed to encrypt $cred_name, using plaintext"
-          if [ -n "$encrypt_output" ]; then
-            echo "  Error details: $encrypt_output" >&2
-          fi
-        fi
-      }
 
       echo "Rotating Headscale API key..."
       
@@ -1050,7 +1139,7 @@ write_files:
       
       # Create new API key
       local api_create_output api_create_error
-      api_create_output=$(headscale apikeys create --expiration 90d 2>&1)
+      api_create_output=$(headscale apikeys create --expiration ${API_KEY_EXPIRATION_DAYS}d 2>&1)
       api_create_error=$?
 
       if [ $api_create_error -ne 0 ]; then
@@ -1066,23 +1155,23 @@ write_files:
         echo "  Output: $api_create_output" >&2
         exit 1
       fi
-      
+
       # Backup old key
       if [ -f "$API_KEY_FILE" ]; then
         cp "$API_KEY_FILE" "${API_KEY_FILE}.bak"
       fi
-      
+
       # Write new key
       echo -n "$NEW_KEY" > "$API_KEY_FILE"
       chown headscale:headscale "$API_KEY_FILE"
       chmod 600 "$API_KEY_FILE"
 
       # Update expiration date
-      date -d "+90 days" +%Y-%m-%d > "$API_KEY_EXPIRES"
+      date -d "+${API_KEY_EXPIRATION_DAYS} days" +%Y-%m-%d > "$API_KEY_EXPIRES"
       chown headscale:headscale "$API_KEY_EXPIRES"
       chmod 600 "$API_KEY_EXPIRES"
 
-      echo -e "${GREEN}[OK]${NC} New API key generated (expires in 90 days)"
+      echo -e "${GREEN}[OK]${NC} New API key generated (expires in ${API_KEY_EXPIRATION_DAYS} days)"
 
       # Encrypt the new API key for systemd-creds
       encrypt_secret_if_supported "$API_KEY_FILE" "headscale_api_key"
@@ -1163,6 +1252,7 @@ write_files:
 
       # Load shared libraries
       source /usr/local/lib/headscale-common.sh
+      source /usr/local/lib/headscale-secrets.sh
 
       CREDSTORE="/etc/credstore.encrypted"
       OIDC_SECRET_PLAIN="/var/lib/headscale/oidc_client_secret"
@@ -1171,10 +1261,10 @@ write_files:
 
       print_banner "Headscale Secrets Migration"
 
-      # Check systemd version (need 250+ for systemd-creds)
-      SYSTEMD_VERSION=$(systemctl --version | head -n1 | awk '{print $2}')
-      if [ "$SYSTEMD_VERSION" -lt 250 ]; then
-        print_error "systemd version $SYSTEMD_VERSION is too old (need 250+)"
+      # Check systemd-creds support
+      if ! check_systemd_creds_support; then
+        SYSTEMD_VERSION=$(get_systemd_version)
+        print_error "systemd-creds not supported (version $SYSTEMD_VERSION < 250)"
         print_info "Keeping plaintext secrets with 600 permissions"
         exit 1
       fi
@@ -1184,10 +1274,10 @@ write_files:
       chmod 700 "$CREDSTORE"
 
       # Function to encrypt a secret using systemd-creds
+      # Wrapper around shared function for this script
       encrypt_secret() {
         local plain_file="$1"
         local cred_name="$2"
-        local encrypted_file="$CREDSTORE/${cred_name}.cred"
 
         if [ ! -f "$plain_file" ]; then
           print_warning "Plaintext secret not found: $plain_file (skipping)"
@@ -1201,16 +1291,12 @@ write_files:
 
         print_info "Encrypting $cred_name..."
 
-        # Encrypt using systemd-creds (bound to machine ID)
-        if systemd-creds encrypt --name="$cred_name" "$plain_file" "$encrypted_file" 2>/dev/null; then
-          chmod 600 "$encrypted_file"
-          print_success "$cred_name encrypted successfully"
-
+        # Use shared encryption function
+        if encrypt_secret_if_supported "$plain_file" "$cred_name"; then
           # Backup plaintext (for rollback)
           cp "$plain_file" "${plain_file}.plaintext-backup"
           chmod 600 "${plain_file}.plaintext-backup"
           print_info "Plaintext backup: ${plain_file}.plaintext-backup"
-
           return 0
         else
           print_error "Failed to encrypt $cred_name"
@@ -1318,6 +1404,9 @@ write_files:
       # Comprehensive health check for Headscale deployment
       # Runs every 5 minutes via systemd timer
 
+      # Load constants
+      source /etc/headscale/constants.conf
+
       HEALTH_STATUS=0
       REPORT=""
 
@@ -1368,7 +1457,7 @@ write_files:
                 NOW_EPOCH=$(date +%s)
                 DAYS_LEFT=$(( (EXPIRY_EPOCH - NOW_EPOCH) / 86400 ))
 
-                if [ $DAYS_LEFT -gt 14 ]; then
+                if [ $DAYS_LEFT -gt ${CERT_EXPIRY_WARNING_DAYS} ]; then
                   REPORT="${REPORT}✓ TLS certificate expires in $DAYS_LEFT days\n"
                 else
                   REPORT="${REPORT}⚠ TLS certificate expires in $DAYS_LEFT days (renew soon!)\n"
@@ -1389,7 +1478,7 @@ write_files:
             NOW_EPOCH=$(date +%s)
             DAYS_LEFT=$(( (EXPIRES_EPOCH - NOW_EPOCH) / 86400 ))
 
-            if [ $DAYS_LEFT -gt 14 ]; then
+            if [ $DAYS_LEFT -gt ${API_KEY_WARNING_THRESHOLD_DAYS} ]; then
               REPORT="${REPORT}✓ API key expires in $DAYS_LEFT days\n"
             else
               REPORT="${REPORT}⚠ API key expires in $DAYS_LEFT days (rotation recommended)\n"
@@ -1402,7 +1491,7 @@ write_files:
       check_disk_space() {
         USAGE=$(df -h /var/lib/headscale 2>/dev/null | tail -1 | awk '{print $5}' | sed 's/%//')
 
-        if [ -n "$USAGE" ] && [ "$USAGE" -lt 80 ]; then
+        if [ -n "$USAGE" ] && [ "$USAGE" -lt ${DISK_WARNING_THRESHOLD_PCT} ]; then
           REPORT="${REPORT}✓ Disk usage: ${USAGE}%\n"
         elif [ -n "$USAGE" ]; then
           REPORT="${REPORT}⚠ Disk usage: ${USAGE}% (cleanup recommended)\n"
@@ -1526,47 +1615,12 @@ write_files:
       # Load shared libraries
       source /usr/local/lib/headscale-common.sh
       source /usr/local/lib/headscale-validators.sh
+      source /usr/local/lib/headscale-secrets.sh
 
       CONFIG_FILE="/etc/msmtprc"
       PASSWORD_FILE="/etc/msmtp-password"
       ALIASES_FILE="/etc/aliases"
       CREDSTORE="/etc/credstore.encrypted"
-
-      # Encrypt a secret file using systemd-creds (if supported)
-      encrypt_secret_if_supported() {
-        local plain_file="$1"
-        local cred_name="$2"
-        local encrypted_file="$CREDSTORE/${cred_name}.cred"
-
-        # Check if systemd-creds is available (systemd 250+)
-        if ! command -v systemd-creds >/dev/null 2>&1; then
-          return 0  # Skip encryption, use plaintext
-        fi
-
-        local systemd_version=$(systemctl --version | head -n1 | awk '{print $2}')
-        if [ "$systemd_version" -lt 250 ]; then
-          return 0  # Skip encryption, use plaintext
-        fi
-
-        # Create credstore directory if it doesn't exist
-        mkdir -p "$CREDSTORE"
-        chmod 700 "$CREDSTORE"
-
-        # Encrypt the secret
-        local encrypt_output encrypt_error
-        encrypt_output=$(systemd-creds encrypt --name="$cred_name" "$plain_file" "$encrypted_file" 2>&1)
-        encrypt_error=$?
-
-        if [ $encrypt_error -eq 0 ]; then
-          chmod 600 "$encrypted_file"
-          print_success "Encrypted $cred_name using systemd-creds"
-        else
-          print_warning "Failed to encrypt $cred_name, using plaintext"
-          if [ -n "$encrypt_output" ]; then
-            echo "  Error details: $encrypt_output" >&2
-          fi
-        fi
-      }
 
       print_banner "msmtp Email Configuration (M365)"
       echo "This configures email notifications via Microsoft 365."

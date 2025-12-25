@@ -185,7 +185,8 @@ function Get-ConfigValue {
                 }
             }
             "Email" {
-                if ($value -notmatch '^[^@]+@[^@]+\.[^@]+$') {
+                # RFC 5322 compliant (simplified) - must match Bash validation
+                if ($value -notmatch '^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$') {
                     Write-Host "  Invalid email format. Please try again." -ForegroundColor Red
                     $valid = $false
                 }
@@ -342,6 +343,10 @@ EOF
         chown headscale:headscale /var/lib/headscale/oidc_client_secret
         chmod 600 /var/lib/headscale/oidc_client_secret
 
+        # Encrypt secret using shared function
+        source /usr/local/lib/headscale-secrets.sh
+        encrypt_secret_if_supported /var/lib/headscale/oidc_client_secret "oidc_client_secret"
+
         # Process templates
         envsubst < /etc/headscale/templates/headscale.yaml.tpl > /etc/headscale/config.yaml
         envsubst < /etc/headscale/templates/headplane.yaml.tpl > /etc/headplane/config.yaml
@@ -355,6 +360,9 @@ EOF
         chown headscale:headscale /var/lib/headscale/api_key
         chmod 600 /var/lib/headscale/api_key
         date -d "+90 days" +%Y-%m-%d > /var/lib/headscale/api_key_expires
+
+        # Encrypt API key using shared function
+        encrypt_secret_if_supported /var/lib/headscale/api_key "headscale_api_key"
 
         # Restart services
         systemctl restart headscale
