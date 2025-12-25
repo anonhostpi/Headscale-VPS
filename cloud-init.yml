@@ -36,7 +36,7 @@
 # =============================================================================
 
 package_update: true
-package_upgrade: true
+package_upgrade: false  # Disabled to prevent uncontrolled updates - use controlled update script instead
 
 packages:
   - curl
@@ -928,7 +928,24 @@ write_files:
       echo "[1/6] Installing nvm..."
       export NVM_DIR="/opt/nvm"
       mkdir -p "$NVM_DIR"
-      curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+
+      # Download NVM with checksum verification (prevents supply chain attacks)
+      NVM_VERSION="v0.40.1"
+      NVM_SHA256="d9835a30ce722c9dc8590e47e5ff8dcb89dd3f977c0c176f719745e84757381a"
+      NVM_INSTALL_SCRIPT="/tmp/nvm-install-${NVM_VERSION}.sh"
+
+      curl -sSL "https://raw.githubusercontent.com/nvm-sh/nvm/${NVM_VERSION}/install.sh" -o "$NVM_INSTALL_SCRIPT"
+
+      # Verify checksum
+      echo "${NVM_SHA256}  ${NVM_INSTALL_SCRIPT}" | sha256sum -c - || {
+        echo "ERROR: NVM install script checksum verification failed!"
+        rm -f "$NVM_INSTALL_SCRIPT"
+        exit 1
+      }
+
+      # Execute verified script
+      bash "$NVM_INSTALL_SCRIPT"
+      rm -f "$NVM_INSTALL_SCRIPT"
       
       # Load nvm
       [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
@@ -1039,17 +1056,24 @@ write_files:
       chmod 600 "$API_KEY_EXPIRES"
       
       echo -e "${GREEN}[OK]${NC} New API key generated (expires in 90 days)"
-      
+
       # Restart Headplane to use new key
       if systemctl is-active --quiet headplane; then
         systemctl restart headplane
         echo -e "${GREEN}[OK]${NC} Headplane restarted with new key"
       fi
-      
-      # Expire old API keys (optional - keeps only the newest)
-      # Uncomment if you want automatic cleanup:
-      # headscale apikeys list | grep -v "$NEW_KEY" | awk '{print $1}' | xargs -I {} headscale apikeys expire --prefix {}
-      
+
+      # Expire old API keys (keeps only the newest)
+      echo "Expiring old API keys..."
+      headscale apikeys list -o json 2>/dev/null | \
+        jq -r --arg newkey "$NEW_KEY" '.[] | select(.key != $newkey) | .prefix' | \
+        while read -r prefix; do
+          if [ -n "$prefix" ]; then
+            headscale apikeys expire --prefix "$prefix" 2>/dev/null && \
+              echo -e "${YELLOW}[!!]${NC} Expired old key: $prefix"
+          fi
+        done
+
       echo ""
       echo "Rotation complete. New key expires: $(cat $API_KEY_EXPIRES)"
 
@@ -1230,13 +1254,12 @@ write_files:
     permissions: "0644"
     content: |
       // Unattended Upgrades Configuration for Headscale VPS
-      
+      // SECURITY ONLY: Restricted to security updates to prevent breaking changes
+
       Unattended-Upgrade::Allowed-Origins {
-          "${distro_id}:${distro_codename}";
           "${distro_id}:${distro_codename}-security";
           "${distro_id}ESMApps:${distro_codename}-apps-security";
           "${distro_id}ESM:${distro_codename}-infra-security";
-          "${distro_id}:${distro_codename}-updates";
       };
       
       // Remove unused kernel packages
@@ -1324,14 +1347,36 @@ write_files:
       update_headscale() {
         local current="$1"
         local latest="$2"
-        
+
         log "Updating Headscale: $current -> $latest"
-        
-        # Download new version
+
+        # Download new version with checksum verification
         local version="${latest#v}"
-        wget -q "https://github.com/juanfont/headscale/releases/download/${latest}/headscale_${version}_linux_amd64.deb" \
-          -O /tmp/headscale.deb
-        
+        local HS_DEB="headscale_${version}_linux_amd64.deb"
+        local HS_URL="https://github.com/juanfont/headscale/releases/download/${latest}/${HS_DEB}"
+
+        wget -q "$HS_URL" -O /tmp/headscale.deb
+
+        # Fetch and verify checksum
+        local CHECKSUMS_URL="https://github.com/juanfont/headscale/releases/download/${latest}/headscale_${version}_checksums.txt"
+        wget -q "$CHECKSUMS_URL" -O /tmp/headscale_checksums.txt
+
+        local EXPECTED_CHECKSUM=$(grep "$HS_DEB" /tmp/headscale_checksums.txt | awk '{print $1}')
+        if [ -z "$EXPECTED_CHECKSUM" ]; then
+          log "ERROR: Could not find checksum for $HS_DEB"
+          rm -f /tmp/headscale.deb /tmp/headscale_checksums.txt
+          return 1
+        fi
+
+        echo "${EXPECTED_CHECKSUM}  /tmp/headscale.deb" | sha256sum -c - || {
+          log "ERROR: Headscale checksum verification failed!"
+          rm -f /tmp/headscale.deb /tmp/headscale_checksums.txt
+          return 1
+        }
+
+        log "Checksum verified: OK"
+        rm -f /tmp/headscale_checksums.txt
+
         # Install
         dpkg -i /tmp/headscale.deb || apt-get install -f -y
         rm /tmp/headscale.deb
@@ -1655,7 +1700,28 @@ write_files:
       SETUP_STAGE="caddy"
       # Install Caddy
       echo "[3/8] Installing Caddy..."
-      curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+
+      # Download and verify Caddy GPG key fingerprint
+      CADDY_GPG_FINGERPRINT="65760C51EDEA2017CEA2CA15155B6D79CA56EA34"
+      TEMP_KEYRING="/tmp/caddy-keyring.gpg"
+
+      curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | \
+        gpg --dearmor -o "$TEMP_KEYRING"
+
+      ACTUAL_FINGERPRINT=$(gpg --no-default-keyring --keyring "$TEMP_KEYRING" --list-keys --with-colons 2>/dev/null | \
+        grep '^fpr' | head -1 | cut -d':' -f10)
+
+      if [ "$ACTUAL_FINGERPRINT" != "$CADDY_GPG_FINGERPRINT" ]; then
+        echo "ERROR: Caddy GPG key fingerprint mismatch!"
+        echo "  Expected: $CADDY_GPG_FINGERPRINT"
+        echo "  Actual:   $ACTUAL_FINGERPRINT"
+        rm -f "$TEMP_KEYRING"
+        exit 1
+      fi
+
+      echo "    GPG fingerprint verified: OK"
+      mv "$TEMP_KEYRING" /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+
       curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list
       apt-get update
       apt-get install -y caddy
@@ -1672,7 +1738,34 @@ write_files:
         HS_VERSION=$(curl -s https://api.github.com/repos/juanfont/headscale/releases/latest | jq -r '.tag_name' | sed 's/v//')
       fi
       echo "    Version: ${HS_VERSION}"
-      wget -q "https://github.com/juanfont/headscale/releases/download/v${HS_VERSION}/headscale_${HS_VERSION}_linux_amd64.deb" -O /tmp/headscale.deb
+
+      # Download with checksum verification
+      HS_DEB="headscale_${HS_VERSION}_linux_amd64.deb"
+      HS_URL="https://github.com/juanfont/headscale/releases/download/v${HS_VERSION}/${HS_DEB}"
+
+      wget -q "$HS_URL" -O /tmp/headscale.deb
+
+      # Fetch and verify checksum
+      CHECKSUMS_URL="https://github.com/juanfont/headscale/releases/download/v${HS_VERSION}/headscale_${HS_VERSION}_checksums.txt"
+      wget -q "$CHECKSUMS_URL" -O /tmp/headscale_checksums.txt
+
+      EXPECTED_CHECKSUM=$(grep "$HS_DEB" /tmp/headscale_checksums.txt | awk '{print $1}')
+      if [ -z "$EXPECTED_CHECKSUM" ]; then
+        echo "ERROR: Could not find checksum for $HS_DEB"
+        rm -f /tmp/headscale.deb /tmp/headscale_checksums.txt
+        exit 1
+      fi
+
+      echo "${EXPECTED_CHECKSUM}  /tmp/headscale.deb" | sha256sum -c - || {
+        echo "ERROR: Headscale checksum verification failed!"
+        rm -f /tmp/headscale.deb /tmp/headscale_checksums.txt
+        exit 1
+      }
+
+      echo "    Checksum verified: OK"
+      rm -f /tmp/headscale_checksums.txt
+
+      # Install
       dpkg -i /tmp/headscale.deb || apt-get install -f -y
       rm /tmp/headscale.deb
       
