@@ -6,24 +6,30 @@ package_update: true
 package_upgrade: false  # Disabled to prevent uncontrolled updates - use controlled update script instead
 
 packages:
-  - curl
-  - wget
-  - apt-transport-https
-  - ca-certificates
-  - gnupg
-  - lsb-release
-  - jq
-  - fail2ban
-  - ufw
-  - openssl
-  - gettext-base
-  - git
-  - build-essential
-  - msmtp
-  - msmtp-mta
-  - unattended-upgrades
-  - apt-listchanges
-  - auditd
+  # Core utilities
+  - curl              # Used: NVM install, API health checks, GitHub API, Caddy GPG key
+  - wget              # Used: Headscale .deb download with checksums
+  - jq                # Used: JSON parsing (API keys, GitHub releases, health checks)
+  - git               # Used: Clone Headplane repository
+  - gettext-base      # Used: envsubst for template processing
+
+  # Security & monitoring
+  - fail2ban          # Used: Intrusion prevention (SSH, OIDC, auth key jails)
+  - ufw               # Used: Firewall management
+  - auditd            # Used: Audit logging for config/secret access
+
+  # TLS & certificates
+  - ca-certificates   # Used: TLS certificate verification
+  - gnupg             # Used: GPG key verification (Caddy repository)
+  - openssl           # Used: Certificate operations in health checks
+
+  # Email notifications
+  - msmtp             # Used: SMTP email sending
+  - msmtp-mta         # Used: sendmail compatibility for system emails
+
+  # Automatic updates
+  - unattended-upgrades  # Used: Automatic security updates
+  - apt-listchanges      # Used: Email notifications for package changes
 
 write_files:
   # =========================================================================
