@@ -421,6 +421,26 @@ function Watch-Deployment {
     }
 }
 
+function Install-Ngrok {
+    param([string]$VMName)
+
+    Write-Host ""
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host "  Installing ngrok" -ForegroundColor Cyan
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host ""
+
+    Write-Host "Installing ngrok inside VM..." -ForegroundColor Yellow
+    try {
+        multipass exec $VMName -- sudo install-ngrok
+        Write-Host "✓ ngrok installed successfully!" -ForegroundColor Green
+    } catch {
+        Write-Host "✗ Failed to install ngrok: $_" -ForegroundColor Red
+        Write-Host "  You can install it manually later with:" -ForegroundColor Yellow
+        Write-Host "  multipass exec $VMName -- sudo install-ngrok" -ForegroundColor Cyan
+    }
+}
+
 #endregion
 
 #region Post-Deployment
@@ -450,23 +470,20 @@ function Show-DeploymentSummary {
 
     Write-Host "Next Steps:" -ForegroundColor Cyan
     Write-Host ""
-    Write-Host "1. Install ngrok inside the VM:" -ForegroundColor Yellow
-    Write-Host "   multipass exec $VMName -- sudo install-ngrok" -ForegroundColor White
-    Write-Host ""
-    Write-Host "2. Start ngrok tunnel inside the VM (in a separate terminal):" -ForegroundColor Yellow
+    Write-Host "1. Start ngrok tunnel (in a separate terminal):" -ForegroundColor Yellow
     Write-Host "   multipass exec $VMName -- start-ngrok-tunnel" -ForegroundColor White
     Write-Host "   This creates the tunnel: https://$NGROK_DOMAIN -> VM:443" -ForegroundColor Cyan
     Write-Host ""
-    Write-Host "3. (Optional) Install Headplane web UI:" -ForegroundColor Yellow
+    Write-Host "2. (Optional) Install Headplane web UI:" -ForegroundColor Yellow
     Write-Host "   multipass exec $VMName -- sudo /opt/install-headplane.sh" -ForegroundColor White
     Write-Host ""
-    Write-Host "4. Connect a Tailscale client:" -ForegroundColor Yellow
+    Write-Host "3. Connect a Tailscale client:" -ForegroundColor Yellow
     Write-Host "   tailscale up --login-server https://$($Config.HEADSCALE_DOMAIN)" -ForegroundColor White
     Write-Host ""
-    Write-Host "5. SSH into VM for direct access:" -ForegroundColor Yellow
+    Write-Host "4. SSH into VM for direct access:" -ForegroundColor Yellow
     Write-Host "   multipass shell $VMName" -ForegroundColor White
     Write-Host ""
-    Write-Host "6. View health status:" -ForegroundColor Yellow
+    Write-Host "5. View health status:" -ForegroundColor Yellow
     Write-Host "   multipass exec $VMName -- sudo headscale-healthcheck" -ForegroundColor White
     Write-Host ""
 
@@ -501,6 +518,9 @@ function Main {
 
         # Monitor deployment
         Watch-Deployment -VMName $VMName
+
+        # Install ngrok after cloud-init completes
+        Install-Ngrok -VMName $VMName
 
         # Show summary
         Show-DeploymentSummary -VMName $VMName -VMIP $vmIP -Config $config
