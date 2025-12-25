@@ -19,7 +19,7 @@ param(
     [string]$VMName,
     [string]$Memory,
     [string]$Disk,
-    [int]$CPUs = 0,
+    [int]$CPUs,
     [string]$ConfigFile = "",
     [string]$Network,
     [string]$NgrokAuthToken,
@@ -28,12 +28,19 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-# Default configuration file (can be overridden with -ConfigFile)
+# Default configuration file
 $DefaultConfigFile = ".\headscale-config-default.json"
 
-# Load defaults from JSON config if it exists, otherwise use hardcoded defaults
-function Get-DefaultConfig {
-    $defaults = @{
+# Get merged configuration with proper priority:
+# CLI options (highest) → JSON config (primary fallback) → Hardcoded defaults (secondary fallback)
+function Get-Config {
+    param(
+        [hashtable]$CliOptions,
+        [string]$ConfigFilePath
+    )
+
+    # Hardcoded defaults (secondary fallback)
+    $hardcodedDefaults = @{
         VMName = "headscale-test"
         Memory = "2G"
         Disk = "20G"
@@ -43,39 +50,59 @@ function Get-DefaultConfig {
         NgrokDomain = "[REDACTED-NGROK-DOMAIN]"
     }
 
-    # Try to load from default config file
-    $configPath = if ($ConfigFile) { $ConfigFile } else { $DefaultConfigFile }
+    # Start with hardcoded defaults
+    $config = $hardcodedDefaults.Clone()
 
-    if (Test-Path $configPath) {
-        Write-Host "Loading defaults from: $configPath" -ForegroundColor Cyan
+    # Try to load JSON config (primary fallback)
+    if (Test-Path $ConfigFilePath) {
+        Write-Host "Loading config from: $ConfigFilePath" -ForegroundColor Cyan
         try {
-            $savedConfig = Get-Content $configPath | ConvertFrom-Json
+            $jsonConfig = Get-Content $ConfigFilePath | ConvertFrom-Json
 
-            # Merge saved config with defaults (saved config takes precedence)
-            foreach ($key in $savedConfig.PSObject.Properties.Name) {
-                if ($defaults.ContainsKey($key)) {
-                    $defaults[$key] = $savedConfig.$key
-                }
+            # Merge JSON config over hardcoded defaults
+            foreach ($property in $jsonConfig.PSObject.Properties) {
+                $config[$property.Name] = $property.Value
             }
         } catch {
-            Write-Host "⚠ Failed to load config file, using hardcoded defaults" -ForegroundColor Yellow
+            Write-Host "⚠ Failed to parse config file, using hardcoded defaults" -ForegroundColor Yellow
         }
     }
 
-    return $defaults
+    # Apply CLI options (highest priority - overrides everything)
+    foreach ($key in $CliOptions.Keys) {
+        if ($null -ne $CliOptions[$key] -and $CliOptions[$key] -ne "" -and $CliOptions[$key] -ne 0) {
+            $config[$key] = $CliOptions[$key]
+        }
+    }
+
+    return $config
 }
 
-# Load defaults
-$defaults = Get-DefaultConfig
+# Capture CLI-provided options from parameters
+$cliOptions = @{
+    VMName = $VMName
+    Memory = $Memory
+    Disk = $Disk
+    CPUs = $CPUs
+    Network = $Network
+    NgrokAuthToken = $NgrokAuthToken
+    NgrokDomain = $NgrokDomain
+}
 
-# Apply defaults to parameters (CLI parameters override defaults)
-if (-not $VMName) { $VMName = $defaults.VMName }
-if (-not $Memory) { $Memory = $defaults.Memory }
-if (-not $Disk) { $Disk = $defaults.Disk }
-if ($CPUs -eq 0) { $CPUs = $defaults.CPUs }
-if (-not $Network) { $Network = $defaults.Network }
-if (-not $NgrokAuthToken) { $NgrokAuthToken = $defaults.NgrokAuthToken }
-if (-not $NgrokDomain) { $NgrokDomain = $defaults.NgrokDomain }
+# Determine config file path
+$configPath = if ($ConfigFile) { $ConfigFile } else { $DefaultConfigFile }
+
+# Get merged configuration
+$options = Get-Config -CliOptions $cliOptions -ConfigFilePath $configPath
+
+# Extract values for use in script
+$VMName = $options.VMName
+$Memory = $options.Memory
+$Disk = $options.Disk
+$CPUs = $options.CPUs
+$Network = $options.Network
+$NgrokAuthToken = $options.NgrokAuthToken
+$NgrokDomain = $options.NgrokDomain
 
 Write-Host @"
 
@@ -178,27 +205,21 @@ function Get-ConfigValue {
 }
 
 function Get-Configuration {
+    param([hashtable]$Options)
+
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host "  Configuration" -ForegroundColor Cyan
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host ""
 
-    # Initialize empty config
+    # Initialize config with values from options (may have been loaded from JSON)
     $config = @{
-        HEADSCALE_DOMAIN = ""
-        AZURE_TENANT_ID = ""
-        AZURE_CLIENT_ID = ""
-        AZURE_CLIENT_SECRET = ""
-        ALLOWED_EMAIL = ""
+        HEADSCALE_DOMAIN = $Options.HEADSCALE_DOMAIN ?? ""
+        AZURE_TENANT_ID = $Options.AZURE_TENANT_ID ?? ""
+        AZURE_CLIENT_ID = $Options.AZURE_CLIENT_ID ?? ""
+        AZURE_CLIENT_SECRET = $Options.AZURE_CLIENT_SECRET ?? ""
+        ALLOWED_EMAIL = $Options.ALLOWED_EMAIL ?? ""
     }
-
-    # Load existing Headscale config from defaults (already loaded earlier)
-    # The defaults object may have been populated from JSON config
-    if ($defaults.HEADSCALE_DOMAIN) { $config.HEADSCALE_DOMAIN = $defaults.HEADSCALE_DOMAIN }
-    if ($defaults.AZURE_TENANT_ID) { $config.AZURE_TENANT_ID = $defaults.AZURE_TENANT_ID }
-    if ($defaults.AZURE_CLIENT_ID) { $config.AZURE_CLIENT_ID = $defaults.AZURE_CLIENT_ID }
-    if ($defaults.AZURE_CLIENT_SECRET) { $config.AZURE_CLIENT_SECRET = $defaults.AZURE_CLIENT_SECRET }
-    if ($defaults.ALLOWED_EMAIL) { $config.ALLOWED_EMAIL = $defaults.ALLOWED_EMAIL }
 
     Write-Host "Ngrok will be used for OAuth callbacks:" -ForegroundColor Yellow
     Write-Host "  Domain: https://$NgrokDomain" -ForegroundColor Cyan
@@ -582,8 +603,8 @@ function Main {
         # Prerequisites
         Test-Prerequisites
 
-        # Configuration
-        $config = Get-Configuration
+        # Configuration (pass options for defaults)
+        $config = Get-Configuration -Options $options
 
         # ngrok info
         Show-NgrokInfo
@@ -603,28 +624,17 @@ function Main {
         # Show summary
         Show-DeploymentSummary -VMName $VMName -VMIP $vmIP -Config $config
 
-        # Save complete config for future use (including VM and ngrok settings)
-        $fullConfig = @{
-            # VM Settings
-            VMName = $VMName
-            Memory = $Memory
-            Disk = $Disk
-            CPUs = $CPUs
-            Network = $Network
+        # Save complete config for future use (merge VM/ngrok options with Headscale config)
+        $fullConfig = $options.Clone()
 
-            # Ngrok Settings
-            NgrokAuthToken = $NgrokAuthToken
-            NgrokDomain = $NgrokDomain
+        # Add Headscale configuration values
+        $fullConfig.HEADSCALE_DOMAIN = $config.HEADSCALE_DOMAIN
+        $fullConfig.AZURE_TENANT_ID = $config.AZURE_TENANT_ID
+        $fullConfig.AZURE_CLIENT_ID = $config.AZURE_CLIENT_ID
+        $fullConfig.AZURE_CLIENT_SECRET = $config.AZURE_CLIENT_SECRET
+        $fullConfig.ALLOWED_EMAIL = $config.ALLOWED_EMAIL
 
-            # Headscale Settings
-            HEADSCALE_DOMAIN = $config.HEADSCALE_DOMAIN
-            AZURE_TENANT_ID = $config.AZURE_TENANT_ID
-            AZURE_CLIENT_ID = $config.AZURE_CLIENT_ID
-            AZURE_CLIENT_SECRET = $config.AZURE_CLIENT_SECRET
-            ALLOWED_EMAIL = $config.ALLOWED_EMAIL
-        }
-
-        $configPath = ".\headscale-config-$VMName.json"
+        $configPath = ".\headscale-config-$($options.VMName).json"
         $fullConfig | ConvertTo-Json | Out-File $configPath
         Write-Host "Configuration saved to: $configPath" -ForegroundColor Green
         Write-Host "  Use -ConfigFile ""$configPath"" to reuse these settings" -ForegroundColor Cyan
