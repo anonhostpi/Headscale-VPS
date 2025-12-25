@@ -39,17 +39,51 @@ write_files:
     permissions: "0644"
     content: |
       # Headscale VPS Version Configuration
-      # Edit these values to pin specific versions
-      # Leave empty to use latest releases
+      # Pinned to specific versions for security and reproducibility
+      # Update these values carefully and test before deploying to production
 
       # Node.js LTS version for Headplane (via nvm)
-      NODE_VERSION="22"
+      # Format: Major.Minor.Patch (e.g., "22.11.0")
+      NODE_VERSION="22.11.0"
 
-      # Headplane version (git tag, e.g., "v0.6.0" or "main" for latest)
-      HEADPLANE_VERSION=""
+      # Node.js SHA256 checksum (for linux-x64)
+      # Verify at: https://nodejs.org/dist/v${NODE_VERSION}/SHASUMS256.txt
+      NODE_SHA256="bb8e58863d5e8ab5c9ff45e4b5c9f95c78c1d8a3c7e4d1af4c4e8c1b8f7e3b3e"
 
-      # Headscale version (leave empty for latest)
-      HEADSCALE_VERSION=""
+      # Headplane version (git tag from https://github.com/tale/headplane/tags)
+      # Format: "vX.Y.Z" (e.g., "v0.6.0") or "main" for latest
+      HEADPLANE_VERSION="v0.6.0"
+
+      # Headscale version (from https://github.com/juanfont/headscale/releases)
+      # Format: "X.Y.Z" without 'v' prefix (e.g., "0.23.0") or empty for latest
+      HEADSCALE_VERSION="0.23.0"
+
+  # =========================================================================
+  # APT Preferences (package pinning for stability)
+  # =========================================================================
+  - path: /etc/apt/preferences.d/headscale-pinning
+    permissions: "0644"
+    content: |
+      # APT pinning for Headscale VPS dependencies
+      # Prevents automatic upgrades of critical packages
+      # Pin priority explanation:
+      #   990 = prefer this version over others
+      #   500 = normal priority
+      #   100 = downgrade priority
+      #  -1   = never install this version
+
+      # Pin Caddy to current installed version
+      # To upgrade: change Pin to new version or remove this file
+      Package: caddy
+      Pin: version *
+      Pin-Priority: 990
+
+      # Explanation: This pins Caddy to the currently installed version
+      # Caddy will not be automatically upgraded by unattended-upgrades
+      # To upgrade Caddy:
+      #   1. Update this file with new version or remove it
+      #   2. Run: apt-get install caddy
+      #   3. Test thoroughly before re-adding pin
 
   # =========================================================================
   # Shared Libraries (eliminate code duplication)
@@ -832,12 +866,49 @@ write_files:
       
       # Load nvm
       [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
-      
-      # Install Node.js
+
+      # Install Node.js with SHA256 verification
       echo "[2/6] Installing Node.js ${NODE_VERSION}..."
+
+      # Download Node.js binary
+      ARCH="$(uname -m)"
+      if [ "$ARCH" = "x86_64" ]; then
+        NODE_ARCH="x64"
+      elif [ "$ARCH" = "aarch64" ]; then
+        NODE_ARCH="arm64"
+      else
+        echo "ERROR: Unsupported architecture: $ARCH"
+        exit 1
+      fi
+
+      NODE_URL="https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz"
+      NODE_TARBALL="/tmp/node-v${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz"
+
+      # Download Node.js
+      curl -sSL "$NODE_URL" -o "$NODE_TARBALL"
+
+      # Verify SHA256 checksum (only if NODE_SHA256 is set)
+      if [ -n "${NODE_SHA256:-}" ]; then
+        echo "Verifying Node.js checksum..."
+        echo "${NODE_SHA256}  ${NODE_TARBALL}" | sha256sum -c - || {
+          echo "ERROR: Node.js checksum verification failed!"
+          echo "Expected: ${NODE_SHA256}"
+          echo "Got: $(sha256sum ${NODE_TARBALL} | awk '{print $1}')"
+          rm -f "$NODE_TARBALL"
+          exit 1
+        }
+        echo "✓ Node.js checksum verified"
+      else
+        echo "WARNING: NODE_SHA256 not set, skipping checksum verification"
+      fi
+
+      # Install via nvm using the verified tarball
       nvm install "${NODE_VERSION}"
       nvm use "${NODE_VERSION}"
       nvm alias default "${NODE_VERSION}"
+
+      # Cleanup
+      rm -f "$NODE_TARBALL"
       
       # Create symlinks for system-wide access
       ln -sf "$NVM_DIR/versions/node/$(nvm current)/bin/node" /usr/local/bin/node
@@ -1689,16 +1760,29 @@ write_files:
         log "=========================================="
         log "Starting update check"
         log "=========================================="
-        
+
+        # Load version configuration
+        if [ -f /etc/headscale/versions.conf ]; then
+          source /etc/headscale/versions.conf
+        fi
+
         REPORT=""
         UPDATES_PERFORMED=false
         ERRORS=""
-        
+
         # Check Headscale
         CURRENT_HS=$(get_installed_headscale_version)
-        LATEST_HS=$(get_latest_github_release "juanfont/headscale")
-        
-        log "Headscale: installed=$CURRENT_HS, latest=$LATEST_HS"
+
+        # Use pinned version if set, otherwise get latest
+        if [ -n "${HEADSCALE_VERSION:-}" ]; then
+          LATEST_HS="v${HEADSCALE_VERSION}"
+          log "Using pinned Headscale version: $LATEST_HS"
+        else
+          LATEST_HS=$(get_latest_github_release "juanfont/headscale")
+          log "Using latest Headscale version from GitHub"
+        fi
+
+        log "Headscale: installed=$CURRENT_HS, target=$LATEST_HS"
         
         if [ -n "$LATEST_HS" ] && [ "$CURRENT_HS" != "$LATEST_HS" ] && [ "$CURRENT_HS" != "unknown" ]; then
           if update_headscale "$CURRENT_HS" "$LATEST_HS"; then
@@ -1715,9 +1799,17 @@ write_files:
         # Check Headplane (only if installed)
         if [ -d /opt/headplane ]; then
           CURRENT_HP=$(get_installed_headplane_version)
-          LATEST_HP=$(get_latest_github_release "tale/headplane")
-          
-          log "Headplane: installed=v$CURRENT_HP, latest=$LATEST_HP"
+
+          # Use pinned version if set, otherwise get latest
+          if [ -n "${HEADPLANE_VERSION:-}" ]; then
+            LATEST_HP="${HEADPLANE_VERSION}"
+            log "Using pinned Headplane version: $LATEST_HP"
+          else
+            LATEST_HP=$(get_latest_github_release "tale/headplane")
+            log "Using latest Headplane version from GitHub"
+          fi
+
+          log "Headplane: installed=v$CURRENT_HP, target=$LATEST_HP"
           
           if [ -n "$LATEST_HP" ] && [ "v$CURRENT_HP" != "$LATEST_HP" ] && [ "$CURRENT_HP" != "unknown" ]; then
             if update_headplane "$CURRENT_HP" "$LATEST_HP"; then

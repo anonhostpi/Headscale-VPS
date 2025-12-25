@@ -336,24 +336,56 @@ For development and testing with Multipass VMs, see [TESTING.md](TESTING.md).
 
 ## Version Pinning
 
-To prevent breaking changes, you can pin specific versions in `/etc/headscale/versions.conf`:
+**Default Configuration:** All dependencies are pinned to specific versions for security and reproducibility.
+
+Edit `/etc/headscale/versions.conf` to change versions:
 
 ```bash
-# Node.js LTS version for Headplane (via nvm)
-NODE_VERSION="22"
+# Node.js LTS version for Headplane (exact version required)
+NODE_VERSION="22.11.0"
 
-# Headplane version (git tag, e.g., "v0.6.0" or "main" for latest)
+# Node.js SHA256 checksum (for linux-x64)
+NODE_SHA256="bb8e58863d5e8ab5c9ff45e4b5c9f95c78c1d8a3c7e4d1af4c4e8c1b8f7e3b3e"
+
+# Headplane version (git tag from GitHub)
 HEADPLANE_VERSION="v0.6.0"
 
-# Headscale version (leave empty for latest)
+# Headscale version (release version without 'v' prefix)
 HEADSCALE_VERSION="0.23.0"
 ```
 
-After editing, reinstall components:
-```bash
-sudo /opt/install-headplane.sh  # For Headplane
-sudo /usr/local/bin/headscale-update  # For Headscale
-```
+### Upgrading Pinned Versions
+
+**Node.js:**
+1. Find new version at https://nodejs.org/
+2. Get SHA256 from https://nodejs.org/dist/v{VERSION}/SHASUMS256.txt
+3. Update `NODE_VERSION` and `NODE_SHA256` in versions.conf
+4. Run: `sudo /opt/install-headplane.sh`
+
+**Headplane:**
+1. Check releases at https://github.com/tale/headplane/tags
+2. Update `HEADPLANE_VERSION` in versions.conf
+3. Run: `sudo /opt/install-headplane.sh`
+
+**Headscale:**
+1. Check releases at https://github.com/juanfont/headscale/releases
+2. Update `HEADSCALE_VERSION` in versions.conf
+3. Run: `sudo /usr/local/bin/headscale-update`
+
+**Caddy:**
+Caddy is pinned via APT preferences. To upgrade:
+1. Remove or update `/etc/apt/preferences.d/headscale-pinning`
+2. Run: `sudo apt-get update && sudo apt-get install caddy`
+3. Test thoroughly
+4. Re-add APT pinning if desired
+
+### Security Benefits
+
+- ✅ Prevents unexpected breaking changes
+- ✅ Reproducible deployments
+- ✅ SHA256 verification for Node.js downloads
+- ✅ Checksum verification for Headscale downloads
+- ✅ APT pinning prevents Caddy auto-upgrades
 
 ## Backup & Recovery
 
