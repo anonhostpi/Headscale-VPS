@@ -74,15 +74,8 @@ function Test-Prerequisites {
         exit 1
     }
 
-    # Check if ngrok is installed
-    try {
-        $ngrokVersion = ngrok version
-        Write-Host "✓ ngrok installed: $ngrokVersion" -ForegroundColor Green
-    } catch {
-        Write-Host "✗ ngrok is not installed" -ForegroundColor Red
-        Write-Host "  Install from: https://ngrok.com/download" -ForegroundColor Yellow
-        exit 1
-    }
+    # Note: ngrok will be installed inside the VM, not required on host
+    Write-Host "ℹ ngrok will be installed inside the VM after deployment" -ForegroundColor Cyan
 
     # Check if cloud-init.yml exists
     if (-not (Test-Path ".\cloud-init.yml")) {
@@ -229,23 +222,19 @@ function Get-Configuration {
 
 #endregion
 
-#region Ngrok Setup
+#region Ngrok Info
 
-function Initialize-Ngrok {
+function Show-NgrokInfo {
     Write-Host "========================================" -ForegroundColor Cyan
-    Write-Host "  Configuring ngrok" -ForegroundColor Cyan
+    Write-Host "  ngrok Configuration" -ForegroundColor Cyan
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host ""
 
-    # Configure ngrok authtoken
-    Write-Host "Setting ngrok authtoken..." -ForegroundColor Yellow
-    ngrok config add-authtoken $NGROK_AUTHTOKEN 2>&1 | Out-Null
-
-    Write-Host "✓ ngrok configured with authtoken" -ForegroundColor Green
-    Write-Host "✓ Static domain: https://$NGROK_DOMAIN" -ForegroundColor Green
+    Write-Host "ngrok will be installed inside the VM with:" -ForegroundColor Yellow
+    Write-Host "  Authtoken: $NGROK_AUTHTOKEN" -ForegroundColor White
+    Write-Host "  Domain:    https://$NGROK_DOMAIN" -ForegroundColor White
     Write-Host ""
-    Write-Host "Note: You'll need to manually start ngrok after VM is running:" -ForegroundColor Yellow
-    Write-Host "      ngrok http --domain=$NGROK_DOMAIN 443" -ForegroundColor Cyan
+    Write-Host "After deployment, you'll start ngrok from inside the VM." -ForegroundColor Yellow
     Write-Host ""
 }
 
@@ -461,19 +450,23 @@ function Show-DeploymentSummary {
 
     Write-Host "Next Steps:" -ForegroundColor Cyan
     Write-Host ""
-    Write-Host "1. Start ngrok tunnel (in a new terminal):" -ForegroundColor Yellow
-    Write-Host "   ngrok http --domain=$NGROK_DOMAIN https://${VMIP}:443" -ForegroundColor White
+    Write-Host "1. Install ngrok inside the VM:" -ForegroundColor Yellow
+    Write-Host "   multipass exec $VMName -- sudo install-ngrok" -ForegroundColor White
     Write-Host ""
-    Write-Host "2. (Optional) Install Headplane web UI:" -ForegroundColor Yellow
+    Write-Host "2. Start ngrok tunnel inside the VM (in a separate terminal):" -ForegroundColor Yellow
+    Write-Host "   multipass exec $VMName -- start-ngrok-tunnel" -ForegroundColor White
+    Write-Host "   This creates the tunnel: https://$NGROK_DOMAIN -> VM:443" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "3. (Optional) Install Headplane web UI:" -ForegroundColor Yellow
     Write-Host "   multipass exec $VMName -- sudo /opt/install-headplane.sh" -ForegroundColor White
     Write-Host ""
-    Write-Host "3. Connect a Tailscale client:" -ForegroundColor Yellow
+    Write-Host "4. Connect a Tailscale client:" -ForegroundColor Yellow
     Write-Host "   tailscale up --login-server https://$($Config.HEADSCALE_DOMAIN)" -ForegroundColor White
     Write-Host ""
-    Write-Host "4. SSH into VM:" -ForegroundColor Yellow
+    Write-Host "5. SSH into VM for direct access:" -ForegroundColor Yellow
     Write-Host "   multipass shell $VMName" -ForegroundColor White
     Write-Host ""
-    Write-Host "5. View health status:" -ForegroundColor Yellow
+    Write-Host "6. View health status:" -ForegroundColor Yellow
     Write-Host "   multipass exec $VMName -- sudo headscale-healthcheck" -ForegroundColor White
     Write-Host ""
 
@@ -497,8 +490,8 @@ function Main {
         # Configuration
         $config = Get-Configuration
 
-        # ngrok setup
-        Initialize-Ngrok
+        # ngrok info
+        Show-NgrokInfo
 
         # Generate configured cloud-init
         $cloudInitPath = New-ConfiguredCloudInit -Config $config
