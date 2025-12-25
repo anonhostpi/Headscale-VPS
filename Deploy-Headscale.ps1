@@ -315,106 +315,7 @@ function Show-NgrokInfo {
 
 #region VM Deployment
 
-function New-ConfiguredCloudInit {
-    param($Config)
-
-    Write-Host "Generating configured cloud-init.yml..." -ForegroundColor Yellow
-
-    # Read base cloud-init.yml
-    $cloudInitContent = Get-Content ".\cloud-init.yml" -Raw
-
-    # Create a custom cloud-init with injected config
-    # We'll add a runcmd at the end to automatically configure the system
-    $configScript = @"
-
-  # Auto-configuration script (injected by Deploy-Headscale.ps1)
-  - path: /root/auto-configure.sh
-    permissions: "0700"
-    content: |
-      #!/bin/bash
-      # Wait for setup to complete
-      echo "Waiting for initial setup to complete..."
-      sleep 30
-
-      # Configure headscale with provided values
-      cat > /tmp/headscale-autoconfig.sh << 'AUTOCONFIG'
-      export HEADSCALE_DOMAIN="$($Config.HEADSCALE_DOMAIN)"
-      export AZURE_TENANT_ID="$($Config.AZURE_TENANT_ID)"
-      export AZURE_CLIENT_ID="$($Config.AZURE_CLIENT_ID)"
-      export AZURE_CLIENT_SECRET="$($Config.AZURE_CLIENT_SECRET)"
-      export ALLOWED_EMAIL="$($Config.ALLOWED_EMAIL)"
-
-      # Run headscale-config with environment variables
-      sudo -E bash -c '
-        source /etc/headscale/versions.conf
-
-        # Write environment file
-        mkdir -p /etc/environment.d
-        cat > /etc/environment.d/headscale.conf << EOF
-HEADSCALE_DOMAIN="\$HEADSCALE_DOMAIN"
-AZURE_TENANT_ID="\$AZURE_TENANT_ID"
-AZURE_CLIENT_ID="\$AZURE_CLIENT_ID"
-AZURE_CLIENT_SECRET="\$AZURE_CLIENT_SECRET"
-ALLOWED_EMAIL="\$ALLOWED_EMAIL"
-EOF
-
-        # Write OIDC secret
-        echo -n "\$AZURE_CLIENT_SECRET" > /var/lib/headscale/oidc_client_secret
-        chown headscale:headscale /var/lib/headscale/oidc_client_secret
-        chmod 600 /var/lib/headscale/oidc_client_secret
-
-        # Encrypt secret using shared function
-        source /usr/local/lib/headscale-secrets.sh
-        encrypt_secret_if_supported /var/lib/headscale/oidc_client_secret "oidc_client_secret"
-
-        # Process templates
-        envsubst < /etc/headscale/templates/headscale.yaml.tpl > /etc/headscale/config.yaml
-        envsubst < /etc/headscale/templates/headplane.yaml.tpl > /etc/headplane/config.yaml
-        envsubst < /etc/headscale/templates/Caddyfile.tpl > /etc/caddy/Caddyfile
-
-        # Generate API key
-        systemctl start headscale
-        sleep 5
-        API_KEY=\$(headscale apikeys create --expiration 90d 2>/dev/null | tail -1)
-        echo -n "\$API_KEY" > /var/lib/headscale/api_key
-        chown headscale:headscale /var/lib/headscale/api_key
-        chmod 600 /var/lib/headscale/api_key
-        date -d "+90 days" +%Y-%m-%d > /var/lib/headscale/api_key_expires
-
-        # Encrypt API key using shared function
-        encrypt_secret_if_supported /var/lib/headscale/api_key "headscale_api_key"
-
-        # Restart services
-        systemctl restart headscale
-        systemctl restart caddy
-
-        echo "Auto-configuration complete!"
-      '
-AUTOCONFIG
-
-      bash /tmp/headscale-autoconfig.sh
-      rm /tmp/headscale-autoconfig.sh
-
-runcmd:
-  - /opt/setup-headscale.sh
-  - /root/auto-configure.sh
-"@
-
-    # Inject the auto-config into cloud-init
-    $modifiedCloudInit = $cloudInitContent -replace '(runcmd:[\s\S]*)', "write_files:$configScript`nruncmd:`n  - /opt/setup-headscale.sh`n  - /root/auto-configure.sh"
-
-    # Save modified cloud-init
-    $tempCloudInit = Join-Path $env:TEMP "cloud-init-configured.yml"
-    $modifiedCloudInit | Out-File -FilePath $tempCloudInit -Encoding UTF8 -NoNewline
-
-    Write-Host "✓ Configured cloud-init generated: $tempCloudInit" -ForegroundColor Green
-    return $tempCloudInit
-}
-
 function Start-MultipassVM {
-    param(
-        [string]$CloudInitPath
-    )
 
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host "  Launching Multipass VM" -ForegroundColor Cyan
@@ -452,7 +353,7 @@ function Start-MultipassVM {
 
     try {
         multipass launch --name $VMName `
-            --cloud-init $CloudInitPath `
+            --cloud-init .\cloud-init.yml `
             --memory $Memory `
             --disk $Disk `
             --cpus $CPUs `
@@ -498,6 +399,94 @@ function Watch-Deployment {
         Write-Host "Waiting for cloud-init to complete..." -ForegroundColor Yellow
         multipass exec $VMName -- cloud-init status --wait
         Write-Host "✓ Cloud-init completed!" -ForegroundColor Green
+    }
+}
+
+function Configure-Headscale {
+    param(
+        [string]$VMName,
+        [hashtable]$Config
+    )
+
+    Write-Host ""
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host "  Configuring Headscale" -ForegroundColor Cyan
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host ""
+
+    Write-Host "Applying configuration to VM..." -ForegroundColor Yellow
+
+    # Build configuration script
+    $configScript = @"
+#!/bin/bash
+set -e
+
+# Source shared libraries
+source /usr/local/lib/headscale-common.sh
+source /usr/local/lib/headscale-secrets.sh
+source /etc/headscale/versions.conf
+
+print_info "Applying Headscale configuration..."
+
+# Write environment file
+mkdir -p /etc/environment.d
+cat > /etc/environment.d/headscale.conf << 'EOF'
+HEADSCALE_DOMAIN=$($Config.HEADSCALE_DOMAIN)
+AZURE_TENANT_ID=$($Config.AZURE_TENANT_ID)
+AZURE_CLIENT_ID=$($Config.AZURE_CLIENT_ID)
+AZURE_CLIENT_SECRET=$($Config.AZURE_CLIENT_SECRET)
+ALLOWED_EMAIL=$($Config.ALLOWED_EMAIL)
+EOF
+
+# Write OIDC secret
+echo -n '$($Config.AZURE_CLIENT_SECRET)' > /var/lib/headscale/oidc_client_secret
+chown headscale:headscale /var/lib/headscale/oidc_client_secret
+chmod 600 /var/lib/headscale/oidc_client_secret
+
+# Encrypt secret
+encrypt_secret_if_supported /var/lib/headscale/oidc_client_secret "oidc_client_secret"
+
+# Process templates
+export HEADSCALE_DOMAIN='$($Config.HEADSCALE_DOMAIN)'
+export AZURE_TENANT_ID='$($Config.AZURE_TENANT_ID)'
+export AZURE_CLIENT_ID='$($Config.AZURE_CLIENT_ID)'
+export AZURE_CLIENT_SECRET='$($Config.AZURE_CLIENT_SECRET)'
+export ALLOWED_EMAIL='$($Config.ALLOWED_EMAIL)'
+
+envsubst < /etc/headscale/templates/headscale.yaml.tpl > /etc/headscale/config.yaml
+envsubst < /etc/headscale/templates/headplane.yaml.tpl > /etc/headplane/config.yaml
+envsubst < /etc/headscale/templates/Caddyfile.tpl > /etc/caddy/Caddyfile
+
+# Generate API key
+print_info "Starting Headscale service..."
+systemctl start headscale
+sleep 5
+
+print_info "Generating API key..."
+API_KEY=`$(headscale apikeys create --expiration 90d 2>/dev/null | tail -1)
+echo -n "`$API_KEY" > /var/lib/headscale/api_key
+chown headscale:headscale /var/lib/headscale/api_key
+chmod 600 /var/lib/headscale/api_key
+date -d "+90 days" +%Y-%m-%d > /var/lib/headscale/api_key_expires
+
+# Encrypt API key
+encrypt_secret_if_supported /var/lib/headscale/api_key "headscale_api_key"
+
+# Restart services
+print_info "Restarting services..."
+systemctl restart headscale
+systemctl restart caddy
+
+print_success "Headscale configuration complete!"
+"@
+
+    # Execute configuration script on VM
+    try {
+        $configScript | multipass exec $VMName -- sudo bash
+        Write-Host "✓ Configuration applied successfully!" -ForegroundColor Green
+    } catch {
+        Write-Host "✗ Failed to apply configuration: $_" -ForegroundColor Red
+        throw
     }
 }
 
@@ -691,16 +680,16 @@ function Main {
         # ngrok info
         Show-NgrokInfo
 
-        # Generate configured cloud-init
-        $cloudInitPath = New-ConfiguredCloudInit -Config $config
+        # Launch VM with base cloud-init
+        $vmIP = Start-MultipassVM
 
-        # Launch VM
-        $vmIP = Start-MultipassVM -CloudInitPath $cloudInitPath
-
-        # Monitor deployment
+        # Monitor deployment (waits for cloud-init)
         Watch-Deployment -VMName $VMName
 
-        # Install ngrok after cloud-init completes
+        # Configure Headscale after cloud-init completes
+        Configure-Headscale -VMName $VMName -Config $config
+
+        # Install ngrok after configuration
         Install-Ngrok -VMName $VMName
 
         # Show summary
