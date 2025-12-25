@@ -147,61 +147,6 @@ function Get-Config {
     return $config
 }
 
-# Capture CLI-provided options from parameters
-$cliOptions = @{
-    VMName = $VMName
-    Memory = $Memory
-    Disk = $Disk
-    CPUs = $CPUs
-    Network = $Network
-    NgrokAuthToken = $NgrokAuthToken
-    NgrokDomain = $NgrokDomain
-}
-
-# Determine config file path
-$configPath = if ($ConfigFile) { $ConfigFile } else { $DefaultConfigFile }
-
-# Define required arguments with validation metadata
-$requiredArgs = @{
-    Network = @{
-        Prompt = "Network adapter name (e.g., 'Ethernet 3', 'Wi-Fi')"
-        ValidationType = "None"
-        IsSecret = $false
-    }
-    NgrokAuthToken = @{
-        Prompt = "Ngrok auth token"
-        ValidationType = "None"
-        IsSecret = $true
-    }
-    NgrokDomain = @{
-        Prompt = "Ngrok domain (e.g., your-domain.ngrok-free.dev)"
-        ValidationType = "Domain"
-        IsSecret = $false
-    }
-}
-
-# Get merged configuration
-$options = Get-Config -CliOptions $cliOptions -ConfigFilePath $configPath -RequiredArgs $requiredArgs
-
-# Extract values for use in script
-$VMName = $options.VMName
-$Memory = $options.Memory
-$Disk = $options.Disk
-$CPUs = $options.CPUs
-$Network = $options.Network
-$NgrokAuthToken = $options.NgrokAuthToken
-$NgrokDomain = $options.NgrokDomain
-
-Write-Host @"
-
-========================================
-  Headscale VPS Deployment (Testing)
-========================================
-
-See TESTING.md for full documentation.
-
-"@ -ForegroundColor Cyan
-
 #region Configuration Functions
 
 function Test-Prerequisites {
@@ -560,6 +505,62 @@ function Show-DeploymentSummary {
 
 function Main {
     try {
+        # Show banner
+        Write-Host @"
+
+========================================
+  Headscale VPS Deployment (Testing)
+========================================
+
+See TESTING.md for full documentation.
+
+"@ -ForegroundColor Cyan
+
+        # Capture CLI-provided options from parameters
+        $cliOptions = @{
+            VMName = $VMName
+            Memory = $Memory
+            Disk = $Disk
+            CPUs = $CPUs
+            Network = $Network
+            NgrokAuthToken = $NgrokAuthToken
+            NgrokDomain = $NgrokDomain
+        }
+
+        # Determine config file path
+        $configPath = if ($ConfigFile) { $ConfigFile } else { $DefaultConfigFile }
+
+        # Define infrastructure required arguments with validation metadata
+        $infraRequiredArgs = @{
+            Network = @{
+                Prompt = "Network adapter name (e.g., 'Ethernet 3', 'Wi-Fi')"
+                ValidationType = "None"
+                IsSecret = $false
+            }
+            NgrokAuthToken = @{
+                Prompt = "Ngrok auth token"
+                ValidationType = "None"
+                IsSecret = $true
+            }
+            NgrokDomain = @{
+                Prompt = "Ngrok domain (e.g., your-domain.ngrok-free.dev)"
+                ValidationType = "Domain"
+                IsSecret = $false
+            }
+        }
+
+        # Get infrastructure configuration
+        $options = Get-Config -CliOptions $cliOptions -ConfigFilePath $configPath -RequiredArgs $infraRequiredArgs
+
+        # Extract values for use in script
+        $script:VMName = $options.VMName
+        $script:Memory = $options.Memory
+        $script:Disk = $options.Disk
+        $script:CPUs = $options.CPUs
+        $script:Network = $options.Network
+        $script:NgrokAuthToken = $options.NgrokAuthToken
+        $script:NgrokDomain = $options.NgrokDomain
+
         # Prerequisites
         Test-Prerequisites
 
