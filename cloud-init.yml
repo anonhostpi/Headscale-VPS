@@ -242,12 +242,46 @@ write_files:
         print_success "Environment file written to $ENV_FILE"
       }
       
+      # Encrypt a secret file using systemd-creds (if supported)
+      encrypt_secret_if_supported() {
+        local plain_file="$1"
+        local cred_name="$2"
+        local credstore="/etc/credstore.encrypted"
+        local encrypted_file="$credstore/${cred_name}.cred"
+
+        # Check if systemd-creds is available (systemd 250+)
+        if ! command -v systemd-creds >/dev/null 2>&1; then
+          return 0  # Skip encryption, use plaintext
+        fi
+
+        local systemd_version=$(systemctl --version | head -n1 | awk '{print $2}')
+        if [ "$systemd_version" -lt 250 ]; then
+          return 0  # Skip encryption, use plaintext
+        fi
+
+        # Create credstore directory if it doesn't exist
+        mkdir -p "$credstore"
+        chmod 700 "$credstore"
+
+        # Encrypt the secret
+        if systemd-creds encrypt --name="$cred_name" "$plain_file" "$encrypted_file" 2>/dev/null; then
+          chmod 600 "$encrypted_file"
+          print_success "Encrypted $cred_name using systemd-creds"
+        else
+          print_warning "Failed to encrypt $cred_name, using plaintext"
+        fi
+      }
+
       # Write secret files
       write_secrets() {
-        echo -n "${AZURE_CLIENT_SECRET}" > /var/lib/headscale/oidc_client_secret
-        chown headscale:headscale /var/lib/headscale/oidc_client_secret
-        chmod 600 /var/lib/headscale/oidc_client_secret
+        local secret_file="/var/lib/headscale/oidc_client_secret"
+        echo -n "${AZURE_CLIENT_SECRET}" > "$secret_file"
+        chown headscale:headscale "$secret_file"
+        chmod 600 "$secret_file"
         print_success "OIDC client secret written"
+
+        # Encrypt the secret for systemd-creds
+        encrypt_secret_if_supported "$secret_file" "oidc_client_secret"
       }
       
       # Generate Headscale API key for Headplane
@@ -273,14 +307,18 @@ write_files:
           fi
           
           API_KEY=$(headscale apikeys create --expiration 90d 2>/dev/null | tail -1)
-          echo -n "$API_KEY" > /var/lib/headscale/api_key
-          chown headscale:headscale /var/lib/headscale/api_key
-          chmod 600 /var/lib/headscale/api_key
+          local api_key_file="/var/lib/headscale/api_key"
+          echo -n "$API_KEY" > "$api_key_file"
+          chown headscale:headscale "$api_key_file"
+          chmod 600 "$api_key_file"
           # Record expiration date for rotation tracking
           date -d "+90 days" +%Y-%m-%d > /var/lib/headscale/api_key_expires
           chown headscale:headscale /var/lib/headscale/api_key_expires
           chmod 600 /var/lib/headscale/api_key_expires
           print_success "Headscale API key generated (expires in 90 days)"
+
+          # Encrypt the API key for systemd-creds
+          encrypt_secret_if_supported "$api_key_file" "headscale_api_key"
         else
           print_success "Headscale API key already exists"
           # Check if key is expiring soon
@@ -501,7 +539,9 @@ write_files:
         only_start_if_oidc_is_available: false
         issuer: https://login.microsoftonline.com/${AZURE_TENANT_ID}/v2.0
         client_id: ${AZURE_CLIENT_ID}
-        client_secret_path: /var/lib/headscale/oidc_client_secret
+        # systemd LoadCredentialEncrypted makes secrets available in $CREDENTIALS_DIRECTORY
+        # Falls back to plaintext path if encrypted credentials don't exist
+        client_secret_path: /run/credentials/headscale.service/oidc_client_secret
         scope:
           - openid
           - profile
@@ -547,10 +587,12 @@ write_files:
       # Azure AD OIDC Configuration
       # IMPORTANT: Must use the SAME Azure App as Headscale
       oidc:
-        headscale_api_key_path: /var/lib/headscale/api_key
+        # systemd LoadCredentialEncrypted makes secrets available in $CREDENTIALS_DIRECTORY
+        # Falls back to plaintext paths if encrypted credentials don't exist
+        headscale_api_key_path: /run/credentials/headplane.service/headscale_api_key
         issuer: https://login.microsoftonline.com/${AZURE_TENANT_ID}/v2.0
         client_id: ${AZURE_CLIENT_ID}
-        client_secret_path: /var/lib/headscale/oidc_client_secret
+        client_secret_path: /run/credentials/headplane.service/oidc_client_secret
         scope: openid email profile
         disable_api_key_login: false
       
@@ -651,16 +693,22 @@ write_files:
       Type=simple
       User=headscale
       Group=headscale
+
+      # Load encrypted credentials (automatically decrypted by systemd)
+      # Falls back to plaintext files if encrypted credentials don't exist
+      LoadCredentialEncrypted=oidc_client_secret:/etc/credstore.encrypted/oidc_client_secret.cred
+      LoadCredential=oidc_client_secret:/var/lib/headscale/oidc_client_secret
+
       ExecStart=/usr/local/bin/headscale serve
       Restart=always
       RestartSec=5
       RuntimeDirectory=headscale
       RuntimeDirectoryMode=0755
-      
+
       # Logging - Headscale outputs to stderr, redirect to file for fail2ban
       StandardOutput=append:/var/log/headscale/headscale.log
       StandardError=append:/var/log/headscale/headscale.log
-      
+
       # Hardening
       NoNewPrivileges=true
       PrivateTmp=true
@@ -701,13 +749,21 @@ write_files:
       Type=simple
       User=headscale
       Group=headscale
+
+      # Load encrypted credentials (automatically decrypted by systemd)
+      # Falls back to plaintext files if encrypted credentials don't exist
+      LoadCredentialEncrypted=oidc_client_secret:/etc/credstore.encrypted/oidc_client_secret.cred
+      LoadCredential=oidc_client_secret:/var/lib/headscale/oidc_client_secret
+      LoadCredentialEncrypted=headscale_api_key:/etc/credstore.encrypted/headscale_api_key.cred
+      LoadCredential=headscale_api_key:/var/lib/headscale/api_key
+
       Environment=HEADPLANE_CONFIG_PATH=/etc/headplane/config.yaml
       Environment=NODE_ENV=production
       WorkingDirectory=/opt/headplane
       ExecStart=/usr/bin/node /opt/headplane/build/server/index.js
       Restart=always
       RestartSec=5
-      
+
       # Hardening
       # NOTE: MemoryDenyWriteExecute is NOT used because Node.js V8 JIT
       # compilation requires write+execute memory pages (W^X exception)
@@ -847,7 +903,37 @@ write_files:
       API_KEY_FILE="/var/lib/headscale/api_key"
       API_KEY_EXPIRES="/var/lib/headscale/api_key_expires"
       HEADPLANE_CONFIG="/etc/headplane/config.yaml"
-      
+      CREDSTORE="/etc/credstore.encrypted"
+
+      # Encrypt a secret file using systemd-creds (if supported)
+      encrypt_secret_if_supported() {
+        local plain_file="$1"
+        local cred_name="$2"
+        local encrypted_file="$CREDSTORE/${cred_name}.cred"
+
+        # Check if systemd-creds is available (systemd 250+)
+        if ! command -v systemd-creds >/dev/null 2>&1; then
+          return 0  # Skip encryption, use plaintext
+        fi
+
+        local systemd_version=$(systemctl --version | head -n1 | awk '{print $2}')
+        if [ "$systemd_version" -lt 250 ]; then
+          return 0  # Skip encryption, use plaintext
+        fi
+
+        # Create credstore directory if it doesn't exist
+        mkdir -p "$CREDSTORE"
+        chmod 700 "$CREDSTORE"
+
+        # Encrypt the secret
+        if systemd-creds encrypt --name="$cred_name" "$plain_file" "$encrypted_file" 2>/dev/null; then
+          chmod 600 "$encrypted_file"
+          print_success "Encrypted $cred_name using systemd-creds"
+        else
+          print_warning "Failed to encrypt $cred_name, using plaintext"
+        fi
+      }
+
       echo "Rotating Headscale API key..."
       
       # Ensure headscale is running
@@ -873,13 +959,16 @@ write_files:
       echo -n "$NEW_KEY" > "$API_KEY_FILE"
       chown headscale:headscale "$API_KEY_FILE"
       chmod 600 "$API_KEY_FILE"
-      
+
       # Update expiration date
       date -d "+90 days" +%Y-%m-%d > "$API_KEY_EXPIRES"
       chown headscale:headscale "$API_KEY_EXPIRES"
       chmod 600 "$API_KEY_EXPIRES"
-      
+
       echo -e "${GREEN}[OK]${NC} New API key generated (expires in 90 days)"
+
+      # Encrypt the new API key for systemd-creds
+      encrypt_secret_if_supported "$API_KEY_FILE" "headscale_api_key"
 
       # Restart Headplane to use new key
       if systemctl is-active --quiet headplane; then
@@ -928,6 +1017,162 @@ write_files:
       else
         echo "$(date): API key valid for $DAYS_LEFT more days" >> "$LOGFILE"
       fi
+
+  # =========================================================================
+  # Secrets Migration Script (migrates plaintext secrets to systemd-creds)
+  # =========================================================================
+  - path: /usr/local/bin/headscale-migrate-secrets
+    permissions: "0755"
+    content: |
+      #!/bin/bash
+      set -e
+
+      # Load shared libraries
+      source /usr/local/lib/headscale-common.sh
+
+      CREDSTORE="/etc/credstore.encrypted"
+      OIDC_SECRET_PLAIN="/var/lib/headscale/oidc_client_secret"
+      API_KEY_PLAIN="/var/lib/headscale/api_key"
+      SMTP_PASSWORD_PLAIN="/etc/msmtp-password"
+
+      print_banner "Headscale Secrets Migration"
+
+      # Check systemd version (need 250+ for systemd-creds)
+      SYSTEMD_VERSION=$(systemctl --version | head -n1 | awk '{print $2}')
+      if [ "$SYSTEMD_VERSION" -lt 250 ]; then
+        print_error "systemd version $SYSTEMD_VERSION is too old (need 250+)"
+        print_info "Keeping plaintext secrets with 600 permissions"
+        exit 1
+      fi
+
+      # Create credstore directory
+      mkdir -p "$CREDSTORE"
+      chmod 700 "$CREDSTORE"
+
+      # Function to encrypt a secret using systemd-creds
+      encrypt_secret() {
+        local plain_file="$1"
+        local cred_name="$2"
+        local encrypted_file="$CREDSTORE/${cred_name}.cred"
+
+        if [ ! -f "$plain_file" ]; then
+          print_warning "Plaintext secret not found: $plain_file (skipping)"
+          return 0
+        fi
+
+        if [ ! -s "$plain_file" ]; then
+          print_warning "Plaintext secret is empty: $plain_file (skipping)"
+          return 0
+        fi
+
+        print_info "Encrypting $cred_name..."
+
+        # Encrypt using systemd-creds (bound to machine ID)
+        if systemd-creds encrypt --name="$cred_name" "$plain_file" "$encrypted_file" 2>/dev/null; then
+          chmod 600 "$encrypted_file"
+          print_success "$cred_name encrypted successfully"
+
+          # Backup plaintext (for rollback)
+          cp "$plain_file" "${plain_file}.plaintext-backup"
+          chmod 600 "${plain_file}.plaintext-backup"
+          print_info "Plaintext backup: ${plain_file}.plaintext-backup"
+
+          return 0
+        else
+          print_error "Failed to encrypt $cred_name"
+          return 1
+        fi
+      }
+
+      # Function to rollback to plaintext
+      rollback_secret() {
+        local plain_file="$1"
+        local cred_name="$2"
+        local encrypted_file="$CREDSTORE/${cred_name}.cred"
+        local backup_file="${plain_file}.plaintext-backup"
+
+        if [ -f "$encrypted_file" ]; then
+          rm -f "$encrypted_file"
+          print_info "Removed encrypted credential: $cred_name"
+        fi
+
+        if [ -f "$backup_file" ]; then
+          mv "$backup_file" "$plain_file"
+          print_success "Restored plaintext from backup: $plain_file"
+        fi
+      }
+
+      # Main migration logic
+      case "${1:-migrate}" in
+        migrate)
+          print_info "Migrating secrets to systemd-creds encryption..."
+          echo ""
+
+          # Migrate OIDC client secret
+          if encrypt_secret "$OIDC_SECRET_PLAIN" "oidc_client_secret"; then
+            print_success "OIDC secret migration complete"
+          else
+            print_error "OIDC secret migration failed"
+          fi
+
+          # Migrate API key
+          if encrypt_secret "$API_KEY_PLAIN" "headscale_api_key"; then
+            print_success "API key migration complete"
+          else
+            print_error "API key migration failed"
+          fi
+
+          # Migrate SMTP password
+          if encrypt_secret "$SMTP_PASSWORD_PLAIN" "smtp_password"; then
+            print_success "SMTP password migration complete"
+          else
+            print_error "SMTP password migration failed"
+          fi
+
+          echo ""
+          print_info "Migration summary:"
+          ls -lh "$CREDSTORE/" 2>/dev/null || print_warning "No credentials encrypted"
+          echo ""
+          print_warning "To apply changes, update service files and restart services:"
+          print_info "  systemctl daemon-reload"
+          print_info "  systemctl restart headscale headplane"
+          ;;
+
+        rollback)
+          print_warning "Rolling back to plaintext secrets..."
+          echo ""
+
+          rollback_secret "$OIDC_SECRET_PLAIN" "oidc_client_secret"
+          rollback_secret "$API_KEY_PLAIN" "headscale_api_key"
+          rollback_secret "$SMTP_PASSWORD_PLAIN" "smtp_password"
+
+          echo ""
+          print_success "Rollback complete - using plaintext secrets"
+          ;;
+
+        status)
+          print_info "Secrets encryption status:"
+          echo ""
+
+          for secret in oidc_client_secret headscale_api_key smtp_password; do
+            if [ -f "$CREDSTORE/${secret}.cred" ]; then
+              print_success "$secret: encrypted"
+            else
+              print_warning "$secret: plaintext"
+            fi
+          done
+          ;;
+
+        *)
+          echo "Usage: $0 {migrate|rollback|status}"
+          echo ""
+          echo "Commands:"
+          echo "  migrate   - Encrypt plaintext secrets using systemd-creds"
+          echo "  rollback  - Restore plaintext secrets from backups"
+          echo "  status    - Show encryption status of secrets"
+          exit 1
+          ;;
+      esac
 
   # =========================================================================
   # Health Check Script (monitors system health)
@@ -1151,6 +1396,36 @@ write_files:
       CONFIG_FILE="/etc/msmtprc"
       PASSWORD_FILE="/etc/msmtp-password"
       ALIASES_FILE="/etc/aliases"
+      CREDSTORE="/etc/credstore.encrypted"
+
+      # Encrypt a secret file using systemd-creds (if supported)
+      encrypt_secret_if_supported() {
+        local plain_file="$1"
+        local cred_name="$2"
+        local encrypted_file="$CREDSTORE/${cred_name}.cred"
+
+        # Check if systemd-creds is available (systemd 250+)
+        if ! command -v systemd-creds >/dev/null 2>&1; then
+          return 0  # Skip encryption, use plaintext
+        fi
+
+        local systemd_version=$(systemctl --version | head -n1 | awk '{print $2}')
+        if [ "$systemd_version" -lt 250 ]; then
+          return 0  # Skip encryption, use plaintext
+        fi
+
+        # Create credstore directory if it doesn't exist
+        mkdir -p "$CREDSTORE"
+        chmod 700 "$CREDSTORE"
+
+        # Encrypt the secret
+        if systemd-creds encrypt --name="$cred_name" "$plain_file" "$encrypted_file" 2>/dev/null; then
+          chmod 600 "$encrypted_file"
+          print_success "Encrypted $cred_name using systemd-creds"
+        else
+          print_warning "Failed to encrypt $cred_name, using plaintext"
+        fi
+      }
 
       print_banner "msmtp Email Configuration (M365)"
       echo "This configures email notifications via Microsoft 365."
@@ -1190,7 +1465,10 @@ write_files:
       echo -n "$SMTP_PASSWORD" > "$PASSWORD_FILE"
       chmod 600 "$PASSWORD_FILE"
       print_success "Password saved to $PASSWORD_FILE"
-      
+
+      # Encrypt the SMTP password for systemd-creds
+      encrypt_secret_if_supported "$PASSWORD_FILE" "smtp_password"
+
       # Update msmtprc
       sed -i "s|^from.*|from           $SENDER_EMAIL|" "$CONFIG_FILE"
       sed -i "s|^user.*|user           $SMTP_USER|" "$CONFIG_FILE"

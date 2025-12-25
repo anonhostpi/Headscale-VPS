@@ -146,6 +146,25 @@ sudo msmtp-config
 sudo nano /etc/headscale/versions.conf
 ```
 
+### Secrets Management
+
+```bash
+# Check encryption status of secrets
+sudo headscale-migrate-secrets status
+
+# Manually migrate existing plaintext secrets to encrypted
+sudo headscale-migrate-secrets migrate
+
+# Rollback to plaintext secrets (if needed)
+sudo headscale-migrate-secrets rollback
+
+# After migration, restart services to use encrypted credentials
+sudo systemctl daemon-reload
+sudo systemctl restart headscale headplane
+```
+
+**Note:** New deployments automatically encrypt secrets when you run `headscale-config` or `msmtp-config`. Manual migration is only needed for existing deployments.
+
 ### Monitoring
 
 ```bash
@@ -211,14 +230,35 @@ df -h /var/lib/headscale
 
 ### Secrets Management
 
-**Current State:**
-- Secrets stored in plaintext files with 600 permissions
-- OIDC client secret: `/var/lib/headscale/oidc_client_secret`
-- API key: `/var/lib/headscale/api_key`
-- SMTP password: `/etc/msmtp-password`
+**Encryption (systemd-creds):**
+- Secrets are automatically encrypted using systemd-creds on systems with systemd 250+
+- Encrypted credentials stored in `/etc/credstore.encrypted/`
+- Systemd services automatically decrypt credentials at runtime
+- Backward compatible: falls back to plaintext files if encryption unavailable
 
-**Future Enhancement:**
-- systemd-creds encryption recommended for production (Phase 3 of tech debt reduction plan)
+**Secret Locations:**
+- OIDC client secret: Encrypted in `/etc/credstore.encrypted/oidc_client_secret.cred`
+- API key: Encrypted in `/etc/credstore.encrypted/headscale_api_key.cred`
+- SMTP password: Encrypted in `/etc/credstore.encrypted/smtp_password.cred`
+- Plaintext backups: Available for rollback (`.plaintext-backup` suffix)
+
+**Migration Commands:**
+```bash
+# Check encryption status
+sudo headscale-migrate-secrets status
+
+# Migrate plaintext secrets to encrypted (automatic on new deployments)
+sudo headscale-migrate-secrets migrate
+
+# Rollback to plaintext if needed
+sudo headscale-migrate-secrets rollback
+```
+
+**How It Works:**
+- When you run `headscale-config` or `msmtp-config`, secrets are automatically encrypted
+- Systemd services load encrypted credentials via `LoadCredentialEncrypted=` directives
+- Configuration files reference `/run/credentials/<service>/<secret_name>` paths
+- Secrets are bound to the machine ID for security
 
 ### Network Security
 
