@@ -1,39 +1,6 @@
 #cloud-config
-
-# =============================================================================
-# Headscale + Headplane on Ubuntu (Production-Ready for Public Exposure)
-# =============================================================================
-#
-# Features:
-#   - Native Headscale install (no containers)
-#   - Caddy reverse proxy with automatic TLS
-#   - Azure AD OIDC authentication (both Headscale and Headplane)
-#   - Fail2ban with real signal jails (with email alerts)
-#   - Systemd hardening
-#   - Headplane web UI with SSO (built from source)
-#   - Template-based configuration with envsubst
-#   - Automatic API key rotation
-#   - Unattended upgrades with email notifications
-#   - Automatic Headscale/Headplane updates via GitHub releases
-#
-# Usage:
-#   multipass launch --name headscale --cloud-init cloud-init.yml --memory 2G --disk 10G
-#
-# Post-install:
-#   1. sudo /opt/install-headplane.sh   (optional, installs web UI)
-#   2. sudo headscale-config            (required, configures OIDC)
-#   3. sudo msmtp-config                (optional, configures email alerts)
-#
-# For Azure AD setup instructions:
-#   cat /etc/headscale/AZURE_AD_SETUP.md
-#
-# Email Notifications (requires step 3):
-#   - OS package updates (daily, via unattended-upgrades)
-#   - Headscale/Headplane updates (triggered after OS updates)
-#   - Fail2ban bans (SSH, OIDC, auth key failures)
-#   - Automatic reboot notifications (when kernel updates require it)
-#
-# =============================================================================
+# Headscale + Headplane VPS - Production Deployment
+# Full documentation: https://github.com/your-repo/headscale-vps/blob/main/README.md
 
 package_update: true
 package_upgrade: false  # Disabled to prevent uncontrolled updates - use controlled update script instead

@@ -1,31 +1,16 @@
 #!/usr/bin/env pwsh
 <#
 .SYNOPSIS
-    Deploy and test Headscale VPS using Multipass with complete configuration
+    Deploy and test Headscale VPS using Multipass
 
 .DESCRIPTION
-    This script automates the deployment of Headscale + Headplane to a Multipass VM
-    with complete configuration coverage, ngrok integration for OAuth callbacks,
-    and automated setup of all required services.
-
-.PARAMETER VMName
-    Name for the Multipass VM (default: headscale-test)
-
-.PARAMETER Memory
-    Memory allocation for VM (default: 2G)
-
-.PARAMETER Disk
-    Disk allocation for VM (default: 20G)
-
-.PARAMETER CPUs
-    CPU allocation for VM (default: 2)
-
-.PARAMETER ConfigFile
-    Path to existing config file (optional - will prompt if not provided)
+    Automates Headscale + Headplane deployment to Multipass VM with complete
+    configuration coverage and ngrok integration for OAuth testing.
+    Full documentation: https://github.com/your-repo/headscale-vps/blob/main/TESTING.md
 
 .EXAMPLE
     .\Deploy-Headscale.ps1
-    .\Deploy-Headscale.ps1 -VMName "headscale-prod" -Memory "4G"
+    .\Deploy-Headscale.ps1 -VMName "test" -Memory "4G" -CPUs 4
 #>
 
 [CmdletBinding()]
@@ -40,22 +25,17 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-# Ngrok configuration (hardcoded from user)
+# Ngrok configuration (testing only - not used in production)
 $NGROK_AUTHTOKEN = "[REDACTED-NGROK-TOKEN]"
 $NGROK_DOMAIN = "[REDACTED-NGROK-DOMAIN]"
 
 Write-Host @"
 
 ========================================
-  Headscale VPS Deployment Script
+  Headscale VPS Deployment (Testing)
 ========================================
 
-This script will:
-1. Prompt for all required configuration
-2. Set up ngrok for OAuth callbacks
-3. Launch Multipass VM with optimized settings
-4. Deploy Headscale + Headplane
-5. Configure all services automatically
+See TESTING.md for full documentation.
 
 "@ -ForegroundColor Cyan
 
