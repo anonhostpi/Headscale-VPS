@@ -416,73 +416,16 @@ function Configure-Headscale {
 
     Write-Host "Applying configuration to VM..." -ForegroundColor Yellow
 
-    # Build configuration script
-    $configScript = @"
-#!/bin/bash
-set -e
-
-# Source shared libraries
-source /usr/local/lib/headscale-common.sh
-source /usr/local/lib/headscale-secrets.sh
-source /etc/headscale/versions.conf
-
-print_info "Applying Headscale configuration..."
-
-# Write environment file
-mkdir -p /etc/environment.d
-cat > /etc/environment.d/headscale.conf << 'EOF'
-HEADSCALE_DOMAIN=$($Config.HEADSCALE_DOMAIN)
-AZURE_TENANT_ID=$($Config.AZURE_TENANT_ID)
-AZURE_CLIENT_ID=$($Config.AZURE_CLIENT_ID)
-AZURE_CLIENT_SECRET=$($Config.AZURE_CLIENT_SECRET)
-ALLOWED_EMAIL=$($Config.ALLOWED_EMAIL)
-EOF
-
-# Write OIDC secret
-echo -n '$($Config.AZURE_CLIENT_SECRET)' > /var/lib/headscale/oidc_client_secret
-chown headscale:headscale /var/lib/headscale/oidc_client_secret
-chmod 600 /var/lib/headscale/oidc_client_secret
-
-# Encrypt secret
-encrypt_secret_if_supported /var/lib/headscale/oidc_client_secret "oidc_client_secret"
-
-# Process templates
+    # Call the existing headscale-config script with environment variables
+    try {
+        multipass exec $VMName -- sudo bash -c @"
 export HEADSCALE_DOMAIN='$($Config.HEADSCALE_DOMAIN)'
 export AZURE_TENANT_ID='$($Config.AZURE_TENANT_ID)'
 export AZURE_CLIENT_ID='$($Config.AZURE_CLIENT_ID)'
 export AZURE_CLIENT_SECRET='$($Config.AZURE_CLIENT_SECRET)'
 export ALLOWED_EMAIL='$($Config.ALLOWED_EMAIL)'
-
-envsubst < /etc/headscale/templates/headscale.yaml.tpl > /etc/headscale/config.yaml
-envsubst < /etc/headscale/templates/headplane.yaml.tpl > /etc/headplane/config.yaml
-envsubst < /etc/headscale/templates/Caddyfile.tpl > /etc/caddy/Caddyfile
-
-# Generate API key
-print_info "Starting Headscale service..."
-systemctl start headscale
-sleep 5
-
-print_info "Generating API key..."
-API_KEY=`$(headscale apikeys create --expiration 90d 2>/dev/null | tail -1)
-echo -n "`$API_KEY" > /var/lib/headscale/api_key
-chown headscale:headscale /var/lib/headscale/api_key
-chmod 600 /var/lib/headscale/api_key
-date -d "+90 days" +%Y-%m-%d > /var/lib/headscale/api_key_expires
-
-# Encrypt API key
-encrypt_secret_if_supported /var/lib/headscale/api_key "headscale_api_key"
-
-# Restart services
-print_info "Restarting services..."
-systemctl restart headscale
-systemctl restart caddy
-
-print_success "Headscale configuration complete!"
+/usr/local/bin/headscale-config
 "@
-
-    # Execute configuration script on VM
-    try {
-        $configScript | multipass exec $VMName -- sudo bash
         Write-Host "✓ Configuration applied successfully!" -ForegroundColor Green
     } catch {
         Write-Host "✗ Failed to apply configuration: $_" -ForegroundColor Red
