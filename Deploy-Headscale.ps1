@@ -37,8 +37,25 @@ function Get-Config {
     param(
         [hashtable]$CliOptions,
         [string]$ConfigFilePath,
-        [hashtable]$RequiredArgs = @{}
+        [hashtable]$RequiredArgs = @{},
+        [string]$BannerTitle = "",
+        [scriptblock]$PrePromptMessage = $null,
+        [bool]$ShowSummary = $false,
+        [bool]$RequireConfirmation = $false
     )
+
+    # Show banner if title provided
+    if ($BannerTitle) {
+        Write-Host "========================================" -ForegroundColor Cyan
+        Write-Host "  $BannerTitle" -ForegroundColor Cyan
+        Write-Host "========================================" -ForegroundColor Cyan
+        Write-Host ""
+    }
+
+    # Show pre-prompt message if provided
+    if ($PrePromptMessage) {
+        & $PrePromptMessage
+    }
 
     # Hardcoded defaults (secondary fallback - for VM resources only)
     # Network, NgrokAuthToken, and NgrokDomain are in headscale-config-default.json
@@ -54,7 +71,9 @@ function Get-Config {
 
     # Try to load JSON config (primary fallback)
     if (Test-Path $ConfigFilePath) {
-        Write-Host "Loading config from: $ConfigFilePath" -ForegroundColor Cyan
+        if (-not $BannerTitle) {
+            Write-Host "Loading config from: $ConfigFilePath" -ForegroundColor Cyan
+        }
         try {
             $jsonConfig = Get-Content $ConfigFilePath | ConvertFrom-Json
 
@@ -81,14 +100,47 @@ function Get-Config {
             # Get metadata for this argument from RequiredArgs
             $metadata = $RequiredArgs[$argName]
 
-            # Use metadata to configure prompt
+            # Use metadata to configure prompt with defaults from config
+            $defaultValue = if ($metadata.DefaultValue) {
+                # Allow dynamic default via scriptblock
+                if ($metadata.DefaultValue -is [scriptblock]) {
+                    & $metadata.DefaultValue
+                } else {
+                    $metadata.DefaultValue
+                }
+            } else {
+                ""
+            }
+
             $value = Get-ConfigValue `
                 -PromptText $metadata.Prompt `
-                -DefaultValue "" `
+                -DefaultValue $defaultValue `
                 -IsSecret:($metadata.IsSecret) `
                 -ValidationType $metadata.ValidationType
 
             $config[$argName] = $value
+        }
+    }
+
+    # Show summary if requested
+    if ($ShowSummary) {
+        Write-Host ""
+        Write-Host "Configuration Summary:" -ForegroundColor Cyan
+        foreach ($argName in $RequiredArgs.Keys) {
+            $metadata = $RequiredArgs[$argName]
+            $displayValue = if ($metadata.IsSecret) { "****" } else { $config[$argName] }
+            $label = if ($metadata.SummaryLabel) { $metadata.SummaryLabel } else { $argName }
+            Write-Host "  ${label}: $displayValue" -ForegroundColor White
+        }
+        Write-Host ""
+    }
+
+    # Require confirmation if requested
+    if ($RequireConfirmation) {
+        $confirm = Read-Host "Is this configuration correct? [Y/n]"
+        if ($confirm -eq 'n' -or $confirm -eq 'N') {
+            Write-Host "Configuration cancelled. Please run the script again." -ForegroundColor Yellow
+            exit 0
         }
     }
 
@@ -239,74 +291,6 @@ function Get-ConfigValue {
     } while (-not $valid)
 
     return $value
-}
-
-function Get-Configuration {
-    param([hashtable]$Options)
-
-    Write-Host "========================================" -ForegroundColor Cyan
-    Write-Host "  Configuration" -ForegroundColor Cyan
-    Write-Host "========================================" -ForegroundColor Cyan
-    Write-Host ""
-
-    # Initialize config with values from options (may have been loaded from JSON)
-    $config = @{
-        HEADSCALE_DOMAIN = $Options.HEADSCALE_DOMAIN ?? ""
-        AZURE_TENANT_ID = $Options.AZURE_TENANT_ID ?? ""
-        AZURE_CLIENT_ID = $Options.AZURE_CLIENT_ID ?? ""
-        AZURE_CLIENT_SECRET = $Options.AZURE_CLIENT_SECRET ?? ""
-        ALLOWED_EMAIL = $Options.ALLOWED_EMAIL ?? ""
-    }
-
-    Write-Host "Ngrok will be used for OAuth callbacks:" -ForegroundColor Yellow
-    Write-Host "  Domain: https://$NgrokDomain" -ForegroundColor Cyan
-    Write-Host ""
-    Write-Host "Note: You can use the ngrok domain OR a custom domain for Headscale." -ForegroundColor Yellow
-    Write-Host "      If using custom domain, ensure DNS points to the VM IP." -ForegroundColor Yellow
-    Write-Host ""
-
-    # Prompt for configuration
-    $config.HEADSCALE_DOMAIN = Get-ConfigValue `
-        -PromptText "Headscale Domain (e.g., $NgrokDomain)" `
-        -DefaultValue $NgrokDomain `
-        -ValidationType Domain
-
-    $config.AZURE_TENANT_ID = Get-ConfigValue `
-        -PromptText "Azure Tenant ID (e.g., contoso.onmicrosoft.com or GUID)" `
-        -DefaultValue $config.AZURE_TENANT_ID `
-        -ValidationType UUID
-
-    $config.AZURE_CLIENT_ID = Get-ConfigValue `
-        -PromptText "Azure Application (Client) ID" `
-        -DefaultValue $config.AZURE_CLIENT_ID `
-        -ValidationType UUID
-
-    $config.AZURE_CLIENT_SECRET = Get-ConfigValue `
-        -PromptText "Azure Client Secret Value" `
-        -DefaultValue $config.AZURE_CLIENT_SECRET `
-        -IsSecret
-
-    $config.ALLOWED_EMAIL = Get-ConfigValue `
-        -PromptText "Allowed Email Address for login" `
-        -DefaultValue $config.ALLOWED_EMAIL `
-        -ValidationType Email
-
-    Write-Host ""
-    Write-Host "Configuration Summary:" -ForegroundColor Cyan
-    Write-Host "  Domain:        $($config.HEADSCALE_DOMAIN)" -ForegroundColor White
-    Write-Host "  Tenant ID:     $($config.AZURE_TENANT_ID)" -ForegroundColor White
-    Write-Host "  Client ID:     $($config.AZURE_CLIENT_ID)" -ForegroundColor White
-    Write-Host "  Client Secret: ****" -ForegroundColor White
-    Write-Host "  Allowed Email: $($config.ALLOWED_EMAIL)" -ForegroundColor White
-    Write-Host ""
-
-    $confirm = Read-Host "Is this configuration correct? [Y/n]"
-    if ($confirm -eq 'n' -or $confirm -eq 'N') {
-        Write-Host "Configuration cancelled. Please run the script again." -ForegroundColor Yellow
-        exit 0
-    }
-
-    return $config
 }
 
 #endregion
@@ -647,8 +631,62 @@ function Main {
         # Prerequisites
         Test-Prerequisites
 
-        # Configuration (pass options for defaults)
-        $config = Get-Configuration -Options $options
+        # Application configuration with banner, summary, and confirmation
+        $appRequiredArgs = @{
+            HEADSCALE_DOMAIN = @{
+                Prompt = "Headscale Domain (e.g., $($options.NgrokDomain))"
+                DefaultValue = { $options.NgrokDomain }
+                ValidationType = "Domain"
+                IsSecret = $false
+                SummaryLabel = "Domain"
+            }
+            AZURE_TENANT_ID = @{
+                Prompt = "Azure Tenant ID (e.g., contoso.onmicrosoft.com or GUID)"
+                DefaultValue = { $options.AZURE_TENANT_ID }
+                ValidationType = "UUID"
+                IsSecret = $false
+                SummaryLabel = "Tenant ID"
+            }
+            AZURE_CLIENT_ID = @{
+                Prompt = "Azure Application (Client) ID"
+                DefaultValue = { $options.AZURE_CLIENT_ID }
+                ValidationType = "UUID"
+                IsSecret = $false
+                SummaryLabel = "Client ID"
+            }
+            AZURE_CLIENT_SECRET = @{
+                Prompt = "Azure Client Secret Value"
+                DefaultValue = { $options.AZURE_CLIENT_SECRET }
+                ValidationType = "None"
+                IsSecret = $true
+                SummaryLabel = "Client Secret"
+            }
+            ALLOWED_EMAIL = @{
+                Prompt = "Allowed Email Address for login"
+                DefaultValue = { $options.ALLOWED_EMAIL }
+                ValidationType = "Email"
+                IsSecret = $false
+                SummaryLabel = "Allowed Email"
+            }
+        }
+
+        $prePromptMsg = {
+            Write-Host "Ngrok will be used for OAuth callbacks:" -ForegroundColor Yellow
+            Write-Host "  Domain: https://$($options.NgrokDomain)" -ForegroundColor Cyan
+            Write-Host ""
+            Write-Host "Note: You can use the ngrok domain OR a custom domain for Headscale." -ForegroundColor Yellow
+            Write-Host "      If using custom domain, ensure DNS points to the VM IP." -ForegroundColor Yellow
+            Write-Host ""
+        }
+
+        $config = Get-Config `
+            -CliOptions @{} `
+            -ConfigFilePath $configPath `
+            -RequiredArgs $appRequiredArgs `
+            -BannerTitle "Configuration" `
+            -PrePromptMessage $prePromptMsg `
+            -ShowSummary $true `
+            -RequireConfirmation $true
 
         # ngrok info
         Show-NgrokInfo
