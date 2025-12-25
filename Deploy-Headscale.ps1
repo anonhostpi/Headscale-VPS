@@ -36,7 +36,8 @@ $DefaultConfigFile = ".\headscale-config-default.json"
 function Get-Config {
     param(
         [hashtable]$CliOptions,
-        [string]$ConfigFilePath
+        [string]$ConfigFilePath,
+        [string[]]$MandatoryArgs = @()
     )
 
     # Hardcoded defaults (secondary fallback - for VM resources only)
@@ -73,6 +74,48 @@ function Get-Config {
         }
     }
 
+    # Argument metadata (prompt text, validation type, is secret)
+    $argMetadata = @{
+        Network = @{
+            Prompt = "Network adapter name (e.g., 'Ethernet 3', 'Wi-Fi')"
+            ValidationType = "None"
+            IsSecret = $false
+        }
+        NgrokAuthToken = @{
+            Prompt = "Ngrok auth token"
+            ValidationType = "None"
+            IsSecret = $true
+        }
+        NgrokDomain = @{
+            Prompt = "Ngrok domain (e.g., your-domain.ngrok-free.dev)"
+            ValidationType = "Domain"
+            IsSecret = $false
+        }
+    }
+
+    # Prompt for missing mandatory arguments
+    foreach ($argName in $MandatoryArgs) {
+        # Check if argument is missing or empty
+        if (-not $config.ContainsKey($argName) -or [string]::IsNullOrWhiteSpace($config[$argName])) {
+            # Get metadata for this argument
+            $metadata = $argMetadata[$argName]
+
+            if ($null -eq $metadata) {
+                # No metadata defined, use basic prompt
+                $value = Get-ConfigValue -PromptText $argName -DefaultValue ""
+            } else {
+                # Use metadata to configure prompt
+                $value = Get-ConfigValue `
+                    -PromptText $metadata.Prompt `
+                    -DefaultValue "" `
+                    -IsSecret:($metadata.IsSecret) `
+                    -ValidationType $metadata.ValidationType
+            }
+
+            $config[$argName] = $value
+        }
+    }
+
     return $config
 }
 
@@ -90,8 +133,11 @@ $cliOptions = @{
 # Determine config file path
 $configPath = if ($ConfigFile) { $ConfigFile } else { $DefaultConfigFile }
 
+# Define mandatory arguments (will prompt if missing from CLI/JSON/defaults)
+$mandatoryArgs = @("Network", "NgrokAuthToken", "NgrokDomain")
+
 # Get merged configuration
-$options = Get-Config -CliOptions $cliOptions -ConfigFilePath $configPath
+$options = Get-Config -CliOptions $cliOptions -ConfigFilePath $configPath -MandatoryArgs $mandatoryArgs
 
 # Extract values for use in script
 $VMName = $options.VMName
