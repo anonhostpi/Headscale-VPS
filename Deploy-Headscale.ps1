@@ -501,8 +501,8 @@ function Show-DeploymentSummary {
     Write-Host "   multipass exec $VMName -- start-ngrok-tunnel" -ForegroundColor White
     Write-Host "   This creates the tunnel: https://$NGROK_DOMAIN -> VM:443" -ForegroundColor Cyan
     Write-Host ""
-    Write-Host "2. (Optional) Install Headplane web UI:" -ForegroundColor Yellow
-    Write-Host "   multipass exec $VMName -- sudo /opt/install-headplane.sh" -ForegroundColor White
+    Write-Host "2. Verify Headplane is running:" -ForegroundColor Yellow
+    Write-Host "   multipass exec $VMName -- systemctl status headplane" -ForegroundColor White
     Write-Host ""
     Write-Host "3. Connect a Tailscale client:" -ForegroundColor Yellow
     Write-Host "   tailscale up --login-server https://$($Config.HEADSCALE_DOMAIN)" -ForegroundColor White

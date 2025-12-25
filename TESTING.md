@@ -69,8 +69,8 @@ After deployment completes:
 # 1. Start ngrok tunnel (in separate terminal)
 multipass exec headscale-test -- start-ngrok-tunnel
 
-# 2. Install Headplane (optional)
-multipass exec headscale-test -- sudo /opt/install-headplane.sh
+# 2. Verify Headplane is running
+multipass exec headscale-test -- systemctl status headplane
 
 # 3. Test web UI access
 # Open: https://[REDACTED-NGROK-DOMAIN]/admin

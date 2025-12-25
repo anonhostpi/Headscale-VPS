@@ -352,7 +352,7 @@ write_files:
         if [ -f /opt/headplane/build/server/index.js ]; then
           systemctl restart headplane && print_success "Headplane restarted" || print_error "Headplane failed to restart"
         else
-          print_warning "Headplane not installed - run: sudo /opt/install-headplane.sh"
+          print_error "Headplane not running - check logs: journalctl -u headplane -n 50"
         fi
         
         systemctl restart caddy && print_success "Caddy restarted" || print_error "Caddy failed to restart"
@@ -1812,11 +1812,11 @@ write_files:
       echo "  Next Steps"
       echo "=========================================="
       echo ""
-      echo "  1. Install Headplane (optional but recommended):"
-      echo "     sudo /opt/install-headplane.sh"
-      echo ""
-      echo "  2. Run the configuration wizard:"
+      echo "  1. Run the configuration wizard:"
       echo "     sudo headscale-config"
+      echo ""
+      echo "  2. Verify all services are running:"
+      echo "     systemctl status headscale headplane caddy"
       echo ""
       echo "  For Azure AD setup instructions, see:"
       echo "     https://github.com/anonhostpi/Headscale-VPS/blob/main/AZURE_AD_SETUP.md"
@@ -1824,3 +1824,4 @@ write_files:
 
 runcmd:
   - /opt/setup-headscale.sh
+  - /opt/install-headplane.sh

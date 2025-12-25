@@ -64,14 +64,15 @@ multipass launch --name headscale --cloud-init cloud-init.yml \
 After cloud-init completes (~5-10 minutes), run these commands on your server:
 
 ```bash
-# 1. Install Headplane web UI (optional but recommended)
-sudo /opt/install-headplane.sh
-
-# 2. Configure Azure AD OIDC (required)
-#    First, set up Azure AD app registration:
-cat /etc/headscale/AZURE_AD_SETUP.md
+# 1. Configure Azure AD OIDC (required)
+#    First, set up Azure AD app registration (see AZURE_AD_SETUP.md)
 #    Then run the configuration wizard:
 sudo headscale-config
+
+# 2. Verify services are running
+systemctl status headscale
+systemctl status headplane
+systemctl status caddy
 
 # 3. Configure email notifications (optional)
 #    For fail2ban alerts and update notifications:
