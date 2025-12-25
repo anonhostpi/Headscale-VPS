@@ -39,15 +39,13 @@ function Get-Config {
         [string]$ConfigFilePath
     )
 
-    # Hardcoded defaults (secondary fallback)
+    # Hardcoded defaults (secondary fallback - for VM resources only)
+    # Network, NgrokAuthToken, and NgrokDomain are in headscale-config-default.json
     $hardcodedDefaults = @{
         VMName = "headscale-test"
         Memory = "2G"
         Disk = "20G"
         CPUs = 2
-        Network = "Ethernet 3"
-        NgrokAuthToken = "[REDACTED-NGROK-TOKEN]"
-        NgrokDomain = "[REDACTED-NGROK-DOMAIN]"
     }
 
     # Start with hardcoded defaults
@@ -158,7 +156,7 @@ function Get-ConfigValue {
                 $prompt = "$PromptText [$DefaultValue]: "
             }
         } else {
-            $prompt = "$PromptText: "
+            $prompt = "$PromptText`: "
         }
 
         if ($IsSecret) {

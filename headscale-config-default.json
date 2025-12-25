@@ -1,0 +1,5 @@
+{
+  "Network": "Ethernet 3",
+  "NgrokAuthToken": "[REDACTED-NGROK-TOKEN]",
+  "NgrokDomain": "[REDACTED-NGROK-DOMAIN]"
+}
