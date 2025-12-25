@@ -28,6 +28,14 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+$script:Defaults = @{
+    ConfigFile = ".\config.json"
+    VMName = "headscale-test"
+    Memory = "2G"
+    Disk = "20G"
+    CPUs = 2
+}
+
 # Default configuration file
 $DefaultConfigFile = ".\headscale-config-default.json"
 
@@ -44,6 +52,12 @@ function Get-Config {
         [bool]$RequireConfirmation = $false
     )
 
+    $ConfigFilePath = if ([string]::IsNullOrWhiteSpace($ConfigFilePath)) {
+        $script:Defaults.ConfigFile
+    } else {
+        $ConfigFilePath
+    }
+
     # Show banner if title provided
     if ($BannerTitle) {
         Write-Host "========================================" -ForegroundColor Cyan
@@ -57,17 +71,8 @@ function Get-Config {
         & $PrePromptMessage
     }
 
-    # Hardcoded defaults (secondary fallback - for VM resources only)
-    # Network, NgrokAuthToken, and NgrokDomain are in headscale-config-default.json
-    $hardcodedDefaults = @{
-        VMName = "headscale-test"
-        Memory = "2G"
-        Disk = "20G"
-        CPUs = 2
-    }
-
     # Start with hardcoded defaults
-    $config = $hardcodedDefaults.Clone()
+    $config = $script:Defaults.Clone()
 
     # Try to load JSON config (primary fallback)
     if (Test-Path $ConfigFilePath) {
