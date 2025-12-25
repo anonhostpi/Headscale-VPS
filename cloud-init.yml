@@ -1106,6 +1106,167 @@ write_files:
       fi
 
   # =========================================================================
+  # Health Check Script (monitors system health)
+  # =========================================================================
+  - path: /usr/local/bin/headscale-healthcheck
+    permissions: "0755"
+    content: |
+      #!/bin/bash
+      # Comprehensive health check for Headscale deployment
+      # Runs every 5 minutes via systemd timer
+
+      HEALTH_STATUS=0
+      REPORT=""
+
+      # Check if service is active
+      check_service() {
+        local service=$1
+        if systemctl is-active --quiet "$service"; then
+          REPORT="${REPORT}✓ $service is running\n"
+        else
+          REPORT="${REPORT}✗ $service is NOT running\n"
+          HEALTH_STATUS=1
+        fi
+      }
+
+      # Check if port is listening
+      check_port() {
+        local port=$1
+        local description=$2
+        if ss -tuln 2>/dev/null | grep -q ":$port "; then
+          REPORT="${REPORT}✓ Port $port ($description) is listening\n"
+        else
+          REPORT="${REPORT}✗ Port $port ($description) is NOT listening\n"
+          HEALTH_STATUS=1
+        fi
+      }
+
+      # Check API endpoint
+      check_api_endpoint() {
+        if curl -sf "http://localhost:8080/health" >/dev/null 2>&1; then
+          REPORT="${REPORT}✓ Headscale API is reachable\n"
+        else
+          REPORT="${REPORT}✗ Headscale API is NOT reachable\n"
+          HEALTH_STATUS=1
+        fi
+      }
+
+      # Check TLS certificate expiry
+      check_cert_expiry() {
+        if [ -f /etc/environment.d/headscale.conf ]; then
+          DOMAIN=$(grep HEADSCALE_DOMAIN /etc/environment.d/headscale.conf | cut -d= -f2 | tr -d '"' 2>/dev/null)
+          if [ -n "$DOMAIN" ]; then
+            CERT="/var/lib/caddy/.local/share/caddy/certificates/acme-v02.api.letsencrypt.org-directory/${DOMAIN}/${DOMAIN}.crt"
+
+            if [ -f "$CERT" ]; then
+              EXPIRY=$(openssl x509 -enddate -noout -in "$CERT" 2>/dev/null | cut -d= -f2)
+              if [ -n "$EXPIRY" ]; then
+                EXPIRY_EPOCH=$(date -d "$EXPIRY" +%s 2>/dev/null)
+                NOW_EPOCH=$(date +%s)
+                DAYS_LEFT=$(( (EXPIRY_EPOCH - NOW_EPOCH) / 86400 ))
+
+                if [ $DAYS_LEFT -gt 14 ]; then
+                  REPORT="${REPORT}✓ TLS certificate expires in $DAYS_LEFT days\n"
+                else
+                  REPORT="${REPORT}⚠ TLS certificate expires in $DAYS_LEFT days (renew soon!)\n"
+                  HEALTH_STATUS=1
+                fi
+              fi
+            fi
+          fi
+        fi
+      }
+
+      # Check API key expiry
+      check_api_key_expiry() {
+        if [ -f /var/lib/headscale/api_key_expires ]; then
+          EXPIRES=$(cat /var/lib/headscale/api_key_expires 2>/dev/null)
+          if [ -n "$EXPIRES" ]; then
+            EXPIRES_EPOCH=$(date -d "$EXPIRES" +%s 2>/dev/null)
+            NOW_EPOCH=$(date +%s)
+            DAYS_LEFT=$(( (EXPIRES_EPOCH - NOW_EPOCH) / 86400 ))
+
+            if [ $DAYS_LEFT -gt 14 ]; then
+              REPORT="${REPORT}✓ API key expires in $DAYS_LEFT days\n"
+            else
+              REPORT="${REPORT}⚠ API key expires in $DAYS_LEFT days (rotation recommended)\n"
+            fi
+          fi
+        fi
+      }
+
+      # Check disk space
+      check_disk_space() {
+        USAGE=$(df -h /var/lib/headscale 2>/dev/null | tail -1 | awk '{print $5}' | sed 's/%//')
+
+        if [ -n "$USAGE" ] && [ "$USAGE" -lt 80 ]; then
+          REPORT="${REPORT}✓ Disk usage: ${USAGE}%\n"
+        elif [ -n "$USAGE" ]; then
+          REPORT="${REPORT}⚠ Disk usage: ${USAGE}% (cleanup recommended)\n"
+          HEALTH_STATUS=1
+        fi
+      }
+
+      # Run all checks
+      check_service headscale
+      check_service caddy
+      check_service fail2ban
+      check_port 8080 "Headscale API"
+      check_port 443 "HTTPS"
+      check_api_endpoint
+      check_cert_expiry
+      check_api_key_expiry
+      check_disk_space
+
+      # Output report
+      echo -e "=========================================="
+      echo -e "  Health Check Report - $(date)"
+      echo -e "=========================================="
+      echo -e "$REPORT"
+
+      if [ $HEALTH_STATUS -eq 0 ]; then
+        echo -e "Status: HEALTHY ✓"
+      else
+        echo -e "Status: DEGRADED ✗"
+      fi
+
+      exit $HEALTH_STATUS
+
+  # =========================================================================
+  # Health Check Systemd Service
+  # =========================================================================
+  - path: /etc/systemd/system/headscale-healthcheck.service
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=Headscale Health Check
+      After=headscale.service caddy.service
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/bin/headscale-healthcheck
+      StandardOutput=journal
+      StandardError=journal
+      SyslogIdentifier=headscale-healthcheck
+
+  # =========================================================================
+  # Health Check Systemd Timer (runs every 5 minutes)
+  # =========================================================================
+  - path: /etc/systemd/system/headscale-healthcheck.timer
+    permissions: "0644"
+    content: |
+      [Unit]
+      Description=Run Headscale Health Check every 5 minutes
+
+      [Timer]
+      OnBootSec=5min
+      OnUnitActiveSec=5min
+      AccuracySec=1min
+
+      [Install]
+      WantedBy=timers.target
+
+  # =========================================================================
   # Logrotate Configuration (prevents log files from growing indefinitely)
   # =========================================================================
   - path: /etc/logrotate.d/headscale
@@ -1807,9 +1968,11 @@ write_files:
       systemctl enable headscale
       systemctl enable caddy
       systemctl enable fail2ban
+      systemctl enable headscale-healthcheck.timer
 
-      # Start fail2ban (doesn't need configuration)
+      # Start fail2ban and health check timer (don't need configuration)
       systemctl start fail2ban
+      systemctl start headscale-healthcheck.timer
 
       SETUP_STAGE="hardening"
       # Apply kernel hardening
