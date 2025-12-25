@@ -11,23 +11,71 @@
 .EXAMPLE
     .\Deploy-Headscale.ps1
     .\Deploy-Headscale.ps1 -VMName "test" -Memory "4G" -CPUs 4
+    .\Deploy-Headscale.ps1 -ConfigFile ".\my-config.json"
 #>
 
 [CmdletBinding()]
 param(
-    [string]$VMName = "headscale-test",
-    [string]$Memory = "2G",
-    [string]$Disk = "20G",
-    [int]$CPUs = 2,
+    [string]$VMName,
+    [string]$Memory,
+    [string]$Disk,
+    [int]$CPUs = 0,
     [string]$ConfigFile = "",
-    [string]$Network = "Ethernet 3"
+    [string]$Network,
+    [string]$NgrokAuthToken,
+    [string]$NgrokDomain
 )
 
 $ErrorActionPreference = "Stop"
 
-# Ngrok configuration (testing only - not used in production)
-$NGROK_AUTHTOKEN = "[REDACTED-NGROK-TOKEN]"
-$NGROK_DOMAIN = "[REDACTED-NGROK-DOMAIN]"
+# Default configuration file (can be overridden with -ConfigFile)
+$DefaultConfigFile = ".\headscale-config-default.json"
+
+# Load defaults from JSON config if it exists, otherwise use hardcoded defaults
+function Get-DefaultConfig {
+    $defaults = @{
+        VMName = "headscale-test"
+        Memory = "2G"
+        Disk = "20G"
+        CPUs = 2
+        Network = "Ethernet 3"
+        NgrokAuthToken = "[REDACTED-NGROK-TOKEN]"
+        NgrokDomain = "[REDACTED-NGROK-DOMAIN]"
+    }
+
+    # Try to load from default config file
+    $configPath = if ($ConfigFile) { $ConfigFile } else { $DefaultConfigFile }
+
+    if (Test-Path $configPath) {
+        Write-Host "Loading defaults from: $configPath" -ForegroundColor Cyan
+        try {
+            $savedConfig = Get-Content $configPath | ConvertFrom-Json
+
+            # Merge saved config with defaults (saved config takes precedence)
+            foreach ($key in $savedConfig.PSObject.Properties.Name) {
+                if ($defaults.ContainsKey($key)) {
+                    $defaults[$key] = $savedConfig.$key
+                }
+            }
+        } catch {
+            Write-Host "⚠ Failed to load config file, using hardcoded defaults" -ForegroundColor Yellow
+        }
+    }
+
+    return $defaults
+}
+
+# Load defaults
+$defaults = Get-DefaultConfig
+
+# Apply defaults to parameters (CLI parameters override defaults)
+if (-not $VMName) { $VMName = $defaults.VMName }
+if (-not $Memory) { $Memory = $defaults.Memory }
+if (-not $Disk) { $Disk = $defaults.Disk }
+if ($CPUs -eq 0) { $CPUs = $defaults.CPUs }
+if (-not $Network) { $Network = $defaults.Network }
+if (-not $NgrokAuthToken) { $NgrokAuthToken = $defaults.NgrokAuthToken }
+if (-not $NgrokDomain) { $NgrokDomain = $defaults.NgrokDomain }
 
 Write-Host @"
 
@@ -135,22 +183,25 @@ function Get-Configuration {
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host ""
 
-    # Load existing config if provided
-    $config = @{}
-    if ($ConfigFile -and (Test-Path $ConfigFile)) {
-        Write-Host "Loading configuration from: $ConfigFile" -ForegroundColor Yellow
-        $existingConfig = Get-Content $ConfigFile | ConvertFrom-Json
-        $config = @{
-            HEADSCALE_DOMAIN = $existingConfig.HEADSCALE_DOMAIN
-            AZURE_TENANT_ID = $existingConfig.AZURE_TENANT_ID
-            AZURE_CLIENT_ID = $existingConfig.AZURE_CLIENT_ID
-            AZURE_CLIENT_SECRET = $existingConfig.AZURE_CLIENT_SECRET
-            ALLOWED_EMAIL = $existingConfig.ALLOWED_EMAIL
-        }
+    # Initialize empty config
+    $config = @{
+        HEADSCALE_DOMAIN = ""
+        AZURE_TENANT_ID = ""
+        AZURE_CLIENT_ID = ""
+        AZURE_CLIENT_SECRET = ""
+        ALLOWED_EMAIL = ""
     }
 
+    # Load existing Headscale config from defaults (already loaded earlier)
+    # The defaults object may have been populated from JSON config
+    if ($defaults.HEADSCALE_DOMAIN) { $config.HEADSCALE_DOMAIN = $defaults.HEADSCALE_DOMAIN }
+    if ($defaults.AZURE_TENANT_ID) { $config.AZURE_TENANT_ID = $defaults.AZURE_TENANT_ID }
+    if ($defaults.AZURE_CLIENT_ID) { $config.AZURE_CLIENT_ID = $defaults.AZURE_CLIENT_ID }
+    if ($defaults.AZURE_CLIENT_SECRET) { $config.AZURE_CLIENT_SECRET = $defaults.AZURE_CLIENT_SECRET }
+    if ($defaults.ALLOWED_EMAIL) { $config.ALLOWED_EMAIL = $defaults.ALLOWED_EMAIL }
+
     Write-Host "Ngrok will be used for OAuth callbacks:" -ForegroundColor Yellow
-    Write-Host "  Domain: https://$NGROK_DOMAIN" -ForegroundColor Cyan
+    Write-Host "  Domain: https://$NgrokDomain" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "Note: You can use the ngrok domain OR a custom domain for Headscale." -ForegroundColor Yellow
     Write-Host "      If using custom domain, ensure DNS points to the VM IP." -ForegroundColor Yellow
@@ -158,8 +209,8 @@ function Get-Configuration {
 
     # Prompt for configuration
     $config.HEADSCALE_DOMAIN = Get-ConfigValue `
-        -PromptText "Headscale Domain (e.g., $NGROK_DOMAIN)" `
-        -DefaultValue $NGROK_DOMAIN `
+        -PromptText "Headscale Domain (e.g., $NgrokDomain)" `
+        -DefaultValue $NgrokDomain `
         -ValidationType Domain
 
     $config.AZURE_TENANT_ID = Get-ConfigValue `
@@ -211,8 +262,8 @@ function Show-NgrokInfo {
     Write-Host ""
 
     Write-Host "ngrok will be installed inside the VM with:" -ForegroundColor Yellow
-    Write-Host "  Authtoken: $NGROK_AUTHTOKEN" -ForegroundColor White
-    Write-Host "  Domain:    https://$NGROK_DOMAIN" -ForegroundColor White
+    Write-Host "  Authtoken: $NgrokAuthToken" -ForegroundColor White
+    Write-Host "  Domain:    https://$NgrokDomain" -ForegroundColor White
     Write-Host ""
     Write-Host "After deployment, you'll start ngrok from inside the VM." -ForegroundColor Yellow
     Write-Host ""
@@ -433,8 +484,8 @@ echo '✓ ngrok installed: '\$(ngrok version)
         $tunnelScript = @"
 #!/bin/bash
 # Start ngrok tunnel for Headscale testing
-AUTHTOKEN='$NGROK_AUTHTOKEN'
-DOMAIN='$NGROK_DOMAIN'
+AUTHTOKEN='$NgrokAuthToken'
+DOMAIN='$NgrokDomain'
 
 echo '=========================================='
 echo '  Starting ngrok tunnel'
@@ -499,7 +550,7 @@ function Show-DeploymentSummary {
     Write-Host ""
     Write-Host "1. Start ngrok tunnel (in a separate terminal):" -ForegroundColor Yellow
     Write-Host "   multipass exec $VMName -- start-ngrok-tunnel" -ForegroundColor White
-    Write-Host "   This creates the tunnel: https://$NGROK_DOMAIN -> VM:443" -ForegroundColor Cyan
+    Write-Host "   This creates the tunnel: https://$NgrokDomain -> VM:443" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "2. Verify Headplane is running:" -ForegroundColor Yellow
     Write-Host "   multipass exec $VMName -- systemctl status headplane" -ForegroundColor White
@@ -552,10 +603,31 @@ function Main {
         # Show summary
         Show-DeploymentSummary -VMName $VMName -VMIP $vmIP -Config $config
 
-        # Save config for future use
+        # Save complete config for future use (including VM and ngrok settings)
+        $fullConfig = @{
+            # VM Settings
+            VMName = $VMName
+            Memory = $Memory
+            Disk = $Disk
+            CPUs = $CPUs
+            Network = $Network
+
+            # Ngrok Settings
+            NgrokAuthToken = $NgrokAuthToken
+            NgrokDomain = $NgrokDomain
+
+            # Headscale Settings
+            HEADSCALE_DOMAIN = $config.HEADSCALE_DOMAIN
+            AZURE_TENANT_ID = $config.AZURE_TENANT_ID
+            AZURE_CLIENT_ID = $config.AZURE_CLIENT_ID
+            AZURE_CLIENT_SECRET = $config.AZURE_CLIENT_SECRET
+            ALLOWED_EMAIL = $config.ALLOWED_EMAIL
+        }
+
         $configPath = ".\headscale-config-$VMName.json"
-        $config | ConvertTo-Json | Out-File $configPath
+        $fullConfig | ConvertTo-Json | Out-File $configPath
         Write-Host "Configuration saved to: $configPath" -ForegroundColor Green
+        Write-Host "  Use -ConfigFile ""$configPath"" to reuse these settings" -ForegroundColor Cyan
 
     } catch {
         Write-Host ""
