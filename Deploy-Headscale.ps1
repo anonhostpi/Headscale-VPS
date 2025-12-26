@@ -340,7 +340,7 @@ function Get-Config {
         $confirm = Read-Host "Is this configuration correct? [Y/n]"
         if ($confirm -eq 'n' -or $confirm -eq 'N') {
             Write-Host "Configuration cancelled. Please run the script again." -ForegroundColor Yellow
-            exit 0
+            throw "Configuration cancelled by user"
         }
     }
 
@@ -396,7 +396,7 @@ function Test-Prerequisites {
     } catch {
         Write-Host "✗ Multipass is not installed" -ForegroundColor Red
         Write-Host "  Install from: https://multipass.run/install" -ForegroundColor Yellow
-        exit 1
+        throw "Multipass is not installed"
     }
 
     # Note: ngrok will be installed inside the VM, not required on host
@@ -405,7 +405,7 @@ function Test-Prerequisites {
     # Check if cloud-init.yml exists
     if (-not (Test-Path ".\cloud-init.yml")) {
         Write-Host "✗ cloud-init.yml not found in current directory" -ForegroundColor Red
-        exit 1
+        throw "cloud-init.yml not found"
     }
     Write-Host "✓ cloud-init.yml found" -ForegroundColor Green
 
@@ -443,7 +443,7 @@ function Start-MultipassVM {
                 multipass purge
             } else {
                 Write-Host "Deployment cancelled." -ForegroundColor Yellow
-                exit 0
+                throw "Deployment cancelled by user"
             }
         }
     } catch {
@@ -464,7 +464,7 @@ function Start-MultipassVM {
         Write-Host "✓ VM launched successfully!" -ForegroundColor Green
     } catch {
         Write-Host "✗ Failed to launch VM: $_" -ForegroundColor Red
-        exit 1
+        throw "Failed to launch VM"
     }
 
     # Get VM IP
@@ -675,6 +675,8 @@ function Show-DeploymentSummary {
 #region Main
 
 function Main {
+    $vmCreated = $false
+
     try {
         # Show banner
         Write-Host @"
@@ -693,6 +695,7 @@ See TESTING.md for full documentation.
         $ip = & {
             # Launch VM with base cloud-init
             $ip = Start-MultipassVM
+            $vmCreated = $true
 
             # Monitor deployment (waits for cloud-init)
             Watch-Deployment
@@ -733,6 +736,26 @@ See TESTING.md for full documentation.
         Write-Host ""
         Write-Host "Stack Trace:" -ForegroundColor Yellow
         Write-Host $_.ScriptStackTrace -ForegroundColor Yellow
+        Write-Host ""
+
+        # Offer cleanup if VM was created
+        if ($vmCreated) {
+            Write-Host "Cleanup Options:" -ForegroundColor Yellow
+            $cleanup = Read-Host "Delete failed VM '$($script:Options.Name)'? [y/N]"
+            if ($cleanup -eq 'y' -or $cleanup -eq 'Y') {
+                Write-Host "Cleaning up..." -ForegroundColor Yellow
+                try {
+                    multipass delete $script:Options.Name
+                    multipass purge
+                    Write-Host "✓ Cleanup complete" -ForegroundColor Green
+                } catch {
+                    Write-Host "✗ Cleanup failed: $_" -ForegroundColor Red
+                }
+            } else {
+                Write-Host "VM '$($script:Options.Name)' left intact for troubleshooting" -ForegroundColor Cyan
+            }
+            Write-Host ""
+        }
 
         Show-TroubleshootingInfo
         exit 1
