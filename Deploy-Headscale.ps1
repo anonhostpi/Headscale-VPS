@@ -522,18 +522,19 @@ function Configure-Headscale {
     Write-Host "Applying configuration to VM..." -ForegroundColor Yellow
 
     # Call the existing headscale-config script with environment variables
-    # Pipe script via stdin to avoid exposing secrets in ps aux
-    $configScript = @"
-export HEADSCALE_DOMAIN='$($Options.Domain)'
-export AZURE_TENANT_ID='$($Options.AzureTenantID)'
-export AZURE_CLIENT_ID='$($Options.AzureClientID)'
-export AZURE_CLIENT_SECRET='$($Options.AzureClientSecret)'
-export ALLOWED_EMAIL='$($Options.AzureAllowedEmail)'
-/usr/local/bin/headscale-config
-"@
+    # Use bash -c to avoid stdin issues
+    $cmd = (@(
+        "export HEADSCALE_DOMAIN='$($Options.Domain)'"
+        "export AZURE_TENANT_ID='$($Options.AzureTenantID)'"
+        "export AZURE_CLIENT_ID='$($Options.AzureClientID)'"
+        "export AZURE_CLIENT_SECRET='$($Options.AzureClientSecret)'"
+        "export ALLOWED_EMAIL='$($Options.AzureAllowedEmail)'"
+        "/usr/local/bin/headscale-config"
+    ) -join " && ")
 
     try {
-        $configScript | multipass exec $Options.Name -- sudo bash
+        multipass exec $Options.Name -- sudo bash -c $cmd
+
         Write-Host "✓ Configuration applied successfully!" -ForegroundColor Green
     } catch {
         Write-Host "✗ Failed to apply configuration: $_" -ForegroundColor Red
