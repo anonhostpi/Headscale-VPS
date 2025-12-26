@@ -580,16 +580,11 @@ function Start-Ngrok {
     # Start ngrok in background using nohup - use bash -c to avoid stdin blocking
     $cmd = (@(
         "pkill ngrok 2>/dev/null || true"
-        (@(
-            "nohup ngrok http --domain=$($Options.Domain) https://localhost:443 > /var/log/ngrok.log 2>&1"
-            "sleep 3"
-        ) -join " & ")
+        "nohup ngrok http --domain=$($Options.Domain) https://localhost:443 > /var/log/ngrok.log 2>&1 &"
+        "sleep 3"
         "if pgrep -x ngrok > /dev/null"
             "then echo '✓ ngrok tunnel started successfully'"
-                (@(
-                    "echo '  PID:'"
-                    "pgrep -x ngrok"
-                ) -join " & ")
+                "echo '  PID: `$(pgrep -x ngrok)'"
                 "echo '  Log: /var/log/ngrok.log'"
             "else echo '✗ Failed to start ngrok'"
                 "exit 1"
