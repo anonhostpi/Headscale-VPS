@@ -599,6 +599,18 @@ function Show-URLs {
     Write-Host ""
 }
 
+function Show-HeadplaneStatus {
+    Write-Host "Headplane Status:" -ForegroundColor Cyan
+    multipass exec $script:Options.Name -- systemctl status headplane
+    Write-Host ""
+}
+
+function Show-HeadscaleHealth {
+    Write-Host "Headscale Health Check:" -ForegroundColor Cyan
+    multipass exec $script:Options.Name -- sudo headscale-healthcheck
+    Write-Host ""
+}
+
 function Show-TroubleshootingInfo {
     Write-Host "Troubleshooting:" -ForegroundColor Cyan
     Write-Host "  View logs:    multipass exec '$($script:Options.Name)' -- journalctl -u headscale -f" -ForegroundColor White
@@ -621,6 +633,8 @@ function Show-DeploymentSummary {
 
     Show-VMInfo -VMIP $VMIP
     Show-URLs
+    Show-HeadplaneStatus
+    Show-HeadscaleHealth
 
     Write-Host "Next Steps:" -ForegroundColor Cyan
     Write-Host "1. Connect a Tailscale client:" -ForegroundColor Yellow
