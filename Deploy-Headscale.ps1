@@ -580,11 +580,39 @@ function Start-Ngrok {
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host ""
 
-    Write-Host "Starting ngrok tunnel inside VM..." -ForegroundColor Yellow
+    Write-Host "Starting ngrok tunnel in background..." -ForegroundColor Yellow
+
+    # Start ngrok in background using nohup
+    $startScript = @"
+#!/bin/bash
+set -e
+
+# Kill any existing ngrok processes
+pkill ngrok 2>/dev/null || true
+
+# Start ngrok in background with nohup
+nohup ngrok http --domain=$($Options.Domain) https://localhost:443 \
+    > /var/log/ngrok.log 2>&1 &
+
+# Wait a moment for ngrok to start
+sleep 3
+
+# Check if ngrok is running
+if pgrep -x ngrok > /dev/null; then
+    echo "✓ ngrok tunnel started successfully"
+    echo "  PID: `$(pgrep -x ngrok)"
+    echo "  Log: /var/log/ngrok.log"
+else
+    echo "✗ Failed to start ngrok"
+    exit 1
+fi
+"@
 
     try {
-        multipass exec $script:Options.Name -- ngrok http --domain=$script:Options.Domain https://localhost:443
-        Write-Host "✓ ngrok tunnel started!" -ForegroundColor Green
+        $startScript | multipass exec $Options.Name -- sudo bash
+        Write-Host "✓ Ngrok tunnel running in background!" -ForegroundColor Green
+        Write-Host "  Tunnel: https://$($Options.Domain) → VM:443" -ForegroundColor Cyan
+        Write-Host "  View logs: multipass exec '$($Options.Name)' -- tail -f /var/log/ngrok.log" -ForegroundColor White
     } catch {
         Write-Host "✗ Failed to start ngrok tunnel: $_" -ForegroundColor Red
         throw
@@ -759,7 +787,7 @@ See TESTING.md for full documentation.
             # Authenticate ngrok
             Configure-Ngrok
 
-            # Start ngrok tunnel
+            # Start ngrok tunnel in background
             Start-Ngrok
         }
 
