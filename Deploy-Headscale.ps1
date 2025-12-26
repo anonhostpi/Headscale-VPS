@@ -53,15 +53,26 @@ param(
         }
         $true
     })]
-    [string]$ConfigFile
+    [string]$ConfigFile,
+
+    # Flag that if false or absent, auto-runs the Main function
+    [switch]$Import
 )
 
 $ErrorActionPreference = "Stop"
 
+New-Module -Name VPS.Headscale.Testing -ScriptBlock {
+param(
+    [hashtable] $CLI
+)
+
+$ErrorActionPreference = "Stop"
+$ModuleScope = @{}
+
 #region Configuration
 
 # Define infrastructure required arguments with validation metadata
-$script:Required = [ordered]@{
+$ModuleScope.Required = [ordered]@{
     ConfigFile = @{
         Prompt = "Path to configuration file (leave blank to use defaults)"
         ValidationType = "None"
@@ -166,10 +177,10 @@ $script:Required = [ordered]@{
     }
 }
 
-$script:Defaults = [ordered]@{}
+$ModuleScope.Defaults = [ordered]@{}
 
-foreach ($key in $script:Required.Keys) {
-    $script:Defaults[$key] = $script:Required[$key].DefaultValue
+foreach ($key in $ModuleScope.Required.Keys) {
+    $ModuleScope.Defaults[$key] = $ModuleScope.Required[$key].DefaultValue
 }
 
 function Get-ConfigValue {
@@ -248,7 +259,7 @@ function Get-Config {
     )
 
     $ConfigFilePath = if ([string]::IsNullOrWhiteSpace($ConfigFilePath)) {
-        $script:Defaults.ConfigFile
+        $ModuleScope.Defaults.ConfigFile
     } else {
         $ConfigFilePath
     }
@@ -267,7 +278,7 @@ function Get-Config {
     }
 
     # Start with hardcoded defaults
-    $config = $script:Defaults.Clone()
+    $config = $ModuleScope.Defaults.Clone()
 
     # Try to load JSON config (primary fallback)
     if (Test-Path $ConfigFilePath) {
@@ -294,11 +305,11 @@ function Get-Config {
     }
 
     # Prompt for missing required arguments
-    foreach ($argName in $script:Required.Keys) {
+    foreach ($argName in $ModuleScope.Required.Keys) {
         # Check if argument is missing or empty
         if (-not $config.ContainsKey($argName) -or [string]::IsNullOrWhiteSpace($config[$argName])) {
             # Get metadata for this argument from required args
-            $metadata = $script:Required[$argName]
+            $metadata = $ModuleScope.Required[$argName]
 
             # Use metadata to configure prompt with defaults from config
             $defaultValue = if ($metadata.DefaultValue) {
@@ -326,8 +337,8 @@ function Get-Config {
     if ($ShowSummary) {
         Write-Host ""
         Write-Host "Configuration Summary:" -ForegroundColor Cyan
-        foreach ($argName in $script:Required.Keys) {
-            $metadata = $script:Required[$argName]
+        foreach ($argName in $ModuleScope.Required.Keys) {
+            $metadata = $ModuleScope.Required[$argName]
             $displayValue = if ($metadata.IsSecret) { "****" } else { $config[$argName] }
             $label = if ($metadata.SummaryLabel) { $metadata.SummaryLabel } else { $argName }
             Write-Host "  ${label}: $displayValue" -ForegroundColor White
@@ -349,30 +360,16 @@ function Get-Config {
 
 # Capture CLI-provided Options from parameters
 # Get infrastructure configuration (script-scoped for use in functions)
-$script:Options = Get-Config -CliOptions (@{
-    Name = $Name
-    Memory = $Memory
-    Disk = $Disk
-    CPUs = $CPUs
-    Network = $Network
-
-    Domain = $Domain
-    
-    NgrokToken = $NgrokToken
-    AzureTenantID = $AzureTenantID
-    AzureClientID = $AzureClientID
-    AzureClientSecret = $AzureClientSecret
-    AzureAllowedEmail = $AzureAllowedEmail
-}) -ConfigFilePath $ConfigFile -ShowSummary $true -RequireConfirmation $true
+$ModuleScope.Options = Get-Config -CliOptions $CLI -ConfigFilePath $ConfigFile -ShowSummary $true -RequireConfirmation $true
 
 function Save-Config {
     param(
         [string] $ConfigFilePath,
-        [hashtable]$Options = $script:Options
+        [hashtable]$Options = $ModuleScope.Options
     )
 
     $ConfigFilePath = if ([string]::IsNullOrWhiteSpace($ConfigFilePath)) {
-        If([string]::IsNullOrWhiteSpace($Options.ConfigFile) -or $Options.ConfigFile -eq $script:Defaults.ConfigFile) {
+        If([string]::IsNullOrWhiteSpace($Options.ConfigFile) -or $Options.ConfigFile -eq $ModuleScope.Defaults.ConfigFile) {
             ".\config-$($Options.Name).json"
         } else {
             $Options.ConfigFile
@@ -419,7 +416,7 @@ function Test-Prerequisites {
 
 function Start-MultipassVM {
     param(
-        [hashtable]$Options = $script:Options
+        [hashtable]$Options = $ModuleScope.Options
     )
 
     Write-Host "========================================" -ForegroundColor Cyan
@@ -487,7 +484,7 @@ function Start-MultipassVM {
 
 function Watch-Deployment {
     param(
-        [hashtable]$Options = $script:Options
+        [hashtable]$Options = $ModuleScope.Options
     )
 
     Write-Host ""
@@ -515,7 +512,7 @@ function Watch-Deployment {
 
 function Configure-Headscale {
     param(
-        [hashtable]$Options = $script:Options
+        [hashtable]$Options = $ModuleScope.Options
     )
 
     Write-Host ""
@@ -548,7 +545,7 @@ export ALLOWED_EMAIL='$($Options.AzureAllowedEmail)'
 
 function Configure-Ngrok {
     param(
-        [hashtable]$Options = $script:Options
+        [hashtable]$Options = $ModuleScope.Options
     )
 
     Write-Host ""
@@ -571,7 +568,7 @@ function Configure-Ngrok {
 
 function Start-Ngrok {
     param(
-        [hashtable]$Options = $script:Options
+        [hashtable]$Options = $ModuleScope.Options
     )
 
     Write-Host ""
@@ -621,7 +618,7 @@ fi
 
 function Install-Ngrok {
     param(
-        [hashtable]$Options = $script:Options
+        [hashtable]$Options = $ModuleScope.Options
     )
 
     Write-Host ""
@@ -662,7 +659,7 @@ echo '✓ ngrok installed: '`$(ngrok version)
 function Show-VMInfo {
     param(
         [string]$VMIP,
-        [hashtable]$Options = $script:Options
+        [hashtable]$Options = $ModuleScope.Options
     )
 
     Write-Host "VM Information:" -ForegroundColor Cyan
@@ -673,7 +670,7 @@ function Show-VMInfo {
 
 function Show-URLs {
     param(
-        [hashtable]$Options = $script:Options
+        [hashtable]$Options = $ModuleScope.Options
     )
 
     Write-Host "Access URLs:" -ForegroundColor Cyan
@@ -684,7 +681,7 @@ function Show-URLs {
 
 function Show-HeadplaneStatus {
     param(
-        [hashtable]$Options = $script:Options
+        [hashtable]$Options = $ModuleScope.Options
     )
 
     Write-Host "Headplane Status:" -ForegroundColor Cyan
@@ -694,7 +691,7 @@ function Show-HeadplaneStatus {
 
 function Show-HeadscaleHealth {
     param(
-        [hashtable]$Options = $script:Options
+        [hashtable]$Options = $ModuleScope.Options
     )
 
     Write-Host "Headscale Health Check:" -ForegroundColor Cyan
@@ -704,7 +701,7 @@ function Show-HeadscaleHealth {
 
 function Show-TroubleshootingInfo {
     param(
-        [hashtable]$Options = $script:Options
+        [hashtable]$Options = $ModuleScope.Options
     )
 
     Write-Host "Troubleshooting:" -ForegroundColor Cyan
@@ -718,7 +715,7 @@ function Show-TroubleshootingInfo {
 function Show-DeploymentSummary {
     param(
         [string]$VMIP,
-        [hashtable]$Options = $script:Options
+        [hashtable]$Options = $ModuleScope.Options
     )
 
     Write-Host ""
@@ -814,18 +811,18 @@ See TESTING.md for full documentation.
         # Offer cleanup if VM was created
         if ($vmCreated) {
             Write-Host "Cleanup Options:" -ForegroundColor Yellow
-            $cleanup = Read-Host "Delete failed VM '$($script:Options.Name)'? [y/N]"
+            $cleanup = Read-Host "Delete failed VM '$($ModuleScope.Options.Name)'? [y/N]"
             if ($cleanup -eq 'y' -or $cleanup -eq 'Y') {
                 Write-Host "Cleaning up..." -ForegroundColor Yellow
                 try {
-                    multipass delete $script:Options.Name
+                    multipass delete $ModuleScope.Options.Name
                     multipass purge
                     Write-Host "✓ Cleanup complete" -ForegroundColor Green
                 } catch {
                     Write-Host "✗ Cleanup failed: $_" -ForegroundColor Red
                 }
             } else {
-                Write-Host "VM '$($script:Options.Name)' left intact for troubleshooting" -ForegroundColor Cyan
+                Write-Host "VM '$($ModuleScope.Options.Name)' left intact for troubleshooting" -ForegroundColor Cyan
             }
             Write-Host ""
         }
@@ -836,6 +833,24 @@ See TESTING.md for full documentation.
 }
 
 # Run main function
-Main
+If(-not $Import) {
+    Main
+}
 
 #endregion
+
+} -ArgumentList (@{
+    Name = $Name
+    Memory = $Memory
+    Disk = $Disk
+    CPUs = $CPUs
+    Network = $Network
+
+    Domain = $Domain
+    
+    NgrokToken = $NgrokToken
+    AzureTenantID = $AzureTenantID
+    AzureClientID = $AzureClientID
+    AzureClientSecret = $AzureClientSecret
+    AzureAllowedEmail = $AzureAllowedEmail
+}) | Import-Module -Force
