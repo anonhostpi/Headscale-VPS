@@ -78,7 +78,7 @@ $ModuleScope.Required = [ordered]@{
         ValidationType = "None"
         IsSecret = $false
 
-        DefaultValue = "$PSScriptRoot\config.json"
+        DefaultValue = ".\config.json"
         SummaryLabel = "Config File"
     }
 
