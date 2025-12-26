@@ -36,6 +36,69 @@ $script:Defaults = @{
     CPUs = 2
 }
 
+function Get-ConfigValue {
+    param(
+        [string]$PromptText,
+        [string]$DefaultValue = "",
+        [switch]$IsSecret,
+        [ValidateSet("Domain", "Email", "UUID", "None")]$ValidationType = "None"
+    )
+
+    do {
+        if ($DefaultValue) {
+            if ($IsSecret -and $DefaultValue) {
+                $prompt = "$PromptText [****hidden****]: "
+            } else {
+                $prompt = "$PromptText [$DefaultValue]: "
+            }
+        } else {
+            $prompt = "$PromptText`: "
+        }
+
+        if ($IsSecret) {
+            $secureValue = Read-Host -Prompt $prompt -AsSecureString
+            $value = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto(
+                [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureValue)
+            )
+        } else {
+            $value = Read-Host -Prompt $prompt
+        }
+
+        # Use default if empty
+        if ([string]::IsNullOrWhiteSpace($value)) {
+            $value = $DefaultValue
+        }
+
+        # Validate
+        $valid = $true
+        switch ($ValidationType) {
+            "Domain" {
+                if ($value -notmatch '^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$') {
+                    Write-Host "  Invalid domain format. Please try again." -ForegroundColor Red
+                    $valid = $false
+                }
+            }
+            "Email" {
+                # RFC 5322 compliant (simplified) - must match Bash validation
+                if ($value -notmatch '^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$') {
+                    Write-Host "  Invalid email format. Please try again." -ForegroundColor Red
+                    $valid = $false
+                }
+            }
+            "UUID" {
+                if ($value -notmatch '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$' -and
+                    $value -notmatch '^[a-zA-Z0-9-]+\.onmicrosoft\.com$') {
+                    Write-Host "  Invalid UUID or tenant format. Please try again." -ForegroundColor Red
+                    $valid = $false
+                }
+            }
+        }
+
+    } while (-not $valid)
+
+    return $value
+}
+
 # Get merged configuration with proper priority:
 # CLI options (highest) → JSON config (primary fallback) → Hardcoded defaults (secondary fallback)
 function Get-Config {
@@ -175,69 +238,6 @@ function Test-Prerequisites {
     Write-Host "✓ cloud-init.yml found" -ForegroundColor Green
 
     Write-Host ""
-}
-
-function Get-ConfigValue {
-    param(
-        [string]$PromptText,
-        [string]$DefaultValue = "",
-        [switch]$IsSecret,
-        [ValidateSet("Domain", "Email", "UUID", "None")]$ValidationType = "None"
-    )
-
-    do {
-        if ($DefaultValue) {
-            if ($IsSecret -and $DefaultValue) {
-                $prompt = "$PromptText [****hidden****]: "
-            } else {
-                $prompt = "$PromptText [$DefaultValue]: "
-            }
-        } else {
-            $prompt = "$PromptText`: "
-        }
-
-        if ($IsSecret) {
-            $secureValue = Read-Host -Prompt $prompt -AsSecureString
-            $value = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto(
-                [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureValue)
-            )
-        } else {
-            $value = Read-Host -Prompt $prompt
-        }
-
-        # Use default if empty
-        if ([string]::IsNullOrWhiteSpace($value)) {
-            $value = $DefaultValue
-        }
-
-        # Validate
-        $valid = $true
-        switch ($ValidationType) {
-            "Domain" {
-                if ($value -notmatch '^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$') {
-                    Write-Host "  Invalid domain format. Please try again." -ForegroundColor Red
-                    $valid = $false
-                }
-            }
-            "Email" {
-                # RFC 5322 compliant (simplified) - must match Bash validation
-                if ($value -notmatch '^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$') {
-                    Write-Host "  Invalid email format. Please try again." -ForegroundColor Red
-                    $valid = $false
-                }
-            }
-            "UUID" {
-                if ($value -notmatch '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$' -and
-                    $value -notmatch '^[a-zA-Z0-9-]+\.onmicrosoft\.com$') {
-                    Write-Host "  Invalid UUID or tenant format. Please try again." -ForegroundColor Red
-                    $valid = $false
-                }
-            }
-        }
-
-    } while (-not $valid)
-
-    return $value
 }
 
 #endregion
