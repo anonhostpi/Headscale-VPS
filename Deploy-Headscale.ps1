@@ -521,17 +521,6 @@ See TESTING.md for full documentation.
 
 "@ -ForegroundColor Cyan
 
-        # Capture CLI-provided options from parameters
-        $cliOptions = @{
-            VMName = $VMName
-            Memory = $Memory
-            Disk = $Disk
-            CPUs = $CPUs
-            Network = $Network
-            NgrokAuthToken = $NgrokAuthToken
-            NgrokDomain = $NgrokDomain
-        }
-
         # Determine config file path
         $configPath = if ($ConfigFile) { $ConfigFile } else { $DefaultConfigFile }
 
@@ -554,8 +543,17 @@ See TESTING.md for full documentation.
             }
         }
 
+        # Capture CLI-provided options from parameters
         # Get infrastructure configuration (script-scoped for use in functions)
-        $script:options = Get-Config -CliOptions $cliOptions -ConfigFilePath $configPath -RequiredArgs $infraRequiredArgs
+        $script:options = Get-Config -CliOptions (@{
+            VMName = $VMName
+            Memory = $Memory
+            Disk = $Disk
+            CPUs = $CPUs
+            Network = $Network
+            NgrokAuthToken = $NgrokAuthToken
+            NgrokDomain = $NgrokDomain
+        }) -ConfigFilePath $configPath -RequiredArgs $infraRequiredArgs
 
         # Prerequisites
         Test-Prerequisites
