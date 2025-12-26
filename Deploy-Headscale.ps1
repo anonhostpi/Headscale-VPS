@@ -278,7 +278,10 @@ function Get-Config {
     }
 
     # Start with hardcoded defaults
-    $config = $ModuleScope.Defaults.Clone()
+    $config = [ordered]@{}
+    foreach ($key in $ModuleScope.Defaults.Keys) {
+        $config[$key] = $ModuleScope.Defaults[$key]
+    }
 
     # Try to load JSON config (primary fallback)
     if (Test-Path $ConfigFilePath) {
@@ -307,7 +310,7 @@ function Get-Config {
     # Prompt for missing required arguments
     foreach ($argName in $ModuleScope.Required.Keys) {
         # Check if argument is missing or empty
-        if (-not $config.ContainsKey($argName) -or [string]::IsNullOrWhiteSpace($config[$argName])) {
+        if (-not $config.Contains($argName) -or [string]::IsNullOrWhiteSpace($config[$argName])) {
             # Get metadata for this argument from required args
             $metadata = $ModuleScope.Required[$argName]
 
