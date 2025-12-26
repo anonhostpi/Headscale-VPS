@@ -554,9 +554,9 @@ function Configure-Ngrok {
 
     Write-Host "Applying configuration to VM..." -ForegroundColor Yellow
 
-    # Call the existing headscale-config script with environment variables
+    # Configure ngrok for root user since Start-Ngrok runs as sudo
     try {
-        multipass exec $Options.Name -- ngrok config add-authtoken $Options.NgrokToken
+        multipass exec $Options.Name -- sudo ngrok config add-authtoken $Options.NgrokToken
         Write-Host "✓ Authenticated successfully!" -ForegroundColor Green
     } catch {
         Write-Host "✗ Failed to apply configuration: $_" -ForegroundColor Red
