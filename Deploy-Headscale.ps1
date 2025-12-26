@@ -67,7 +67,7 @@ $script:Required = [ordered]@{
         ValidationType = "None"
         IsSecret = $false
 
-        DefaultValue = ".\config.json"
+        DefaultValue = "$PSScriptRoot\config.json"
         SummaryLabel = "Config File"
     }
 
