@@ -367,20 +367,21 @@ $script:Options = Get-Config -CliOptions (@{
 
 function Save-Config {
     param(
-        [string] $ConfigFilePath
+        [string] $ConfigFilePath,
+        [hashtable]$Options = $script:Options
     )
 
     $ConfigFilePath = if ([string]::IsNullOrWhiteSpace($ConfigFilePath)) {
-        If([string]::IsNullOrWhiteSpace($script:Options.ConfigFile) -or $script:Options.ConfigFile -eq $script:Defaults.ConfigFile) {
-            ".\config-$($script:Options.Name).json"
+        If([string]::IsNullOrWhiteSpace($Options.ConfigFile) -or $Options.ConfigFile -eq $script:Defaults.ConfigFile) {
+            ".\config-$($Options.Name).json"
         } else {
-            $script:Options.ConfigFile
+            $Options.ConfigFile
         }
     } else {
         $ConfigFilePath
     }
 
-    $script:Options | ConvertTo-Json | Out-File $ConfigFilePath
+    $Options | ConvertTo-Json | Out-File $ConfigFilePath
 
     Write-Host "Configuration saved to: $ConfigFilePath" -ForegroundColor Green
     Write-Host "  Use -ConfigFile ""$ConfigFilePath"" to reuse these settings" -ForegroundColor Cyan
@@ -417,6 +418,9 @@ function Test-Prerequisites {
 #region VM Deployment
 
 function Start-MultipassVM {
+    param(
+        [hashtable]$Options = $script:Options
+    )
 
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host "  Launching Multipass VM" -ForegroundColor Cyan
@@ -424,22 +428,22 @@ function Start-MultipassVM {
     Write-Host ""
 
     Write-Host "VM Configuration:" -ForegroundColor Yellow
-    Write-Host "  Name:    '$($script:Options.Name)'" -ForegroundColor White
-    Write-Host "  Memory:  '$($script:Options.Memory)'" -ForegroundColor White
-    Write-Host "  Disk:    '$($script:Options.Disk)'" -ForegroundColor White
-    Write-Host "  CPUs:    '$($script:Options.CPUs)'" -ForegroundColor White
-    Write-Host "  Network: '$($script:Options.Network)'" -ForegroundColor White
+    Write-Host "  Name:    '$($Options.Name)'" -ForegroundColor White
+    Write-Host "  Memory:  '$($Options.Memory)'" -ForegroundColor White
+    Write-Host "  Disk:    '$($Options.Disk)'" -ForegroundColor White
+    Write-Host "  CPUs:    '$($Options.CPUs)'" -ForegroundColor White
+    Write-Host "  Network: '$($Options.Network)'" -ForegroundColor White
     Write-Host ""
 
     # Check if VM already exists
     try {
-        $existingVM = multipass list | Select-String $script:Options.Name
+        $existingVM = multipass list | Select-String $Options.Name
         if ($existingVM) {
-            Write-Host "VM '$($script:Options.Name)' already exists!" -ForegroundColor Yellow
+            Write-Host "VM '$($Options.Name)' already exists!" -ForegroundColor Yellow
             $overwrite = Read-Host "Delete and recreate? [y/N]"
             if ($overwrite -eq 'y' -or $overwrite -eq 'Y') {
                 Write-Host "Deleting existing VM..." -ForegroundColor Yellow
-                multipass delete $script:Options.Name
+                multipass delete $Options.Name
                 multipass purge
             } else {
                 Write-Host "Deployment cancelled." -ForegroundColor Yellow
@@ -453,12 +457,12 @@ function Start-MultipassVM {
     Write-Host "Launching VM (this may take several minutes)..." -ForegroundColor Yellow
 
     try {
-        multipass launch --name $script:Options.Name `
-            --cloud-init .\cloud-init.yml `
-            --memory $script:Options.Memory `
-            --disk $script:Options.Disk `
-            --cpus $script:Options.CPUs `
-            --network $script:Options.Network `
+        multipass launch --name $Options.Name `
+            --cloud-init ".\cloud-init.yml" `
+            --memory $Options.Memory `
+            --disk $Options.Disk `
+            --cpus $Options.CPUs `
+            --network $Options.Network `
             22.04
 
         Write-Host "✓ VM launched successfully!" -ForegroundColor Green
@@ -469,7 +473,7 @@ function Start-MultipassVM {
 
     # Get VM IP
     Start-Sleep -Seconds 5
-    $vmInfo = multipass info $script:Options.Name
+    $vmInfo = multipass info $Options.Name
     $ipMatch = $vmInfo | Select-String "IPv4:\s+(\d+\.\d+\.\d+\.\d+)"
     if ($ipMatch) {
         $vmIP = $ipMatch.Matches.Groups[1].Value
@@ -482,6 +486,10 @@ function Start-MultipassVM {
 }
 
 function Watch-Deployment {
+    param(
+        [hashtable]$Options = $script:Options
+    )
+
     Write-Host ""
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host "  Monitoring Deployment" -ForegroundColor Cyan
@@ -489,14 +497,14 @@ function Watch-Deployment {
     Write-Host ""
     Write-Host "Cloud-init is now running setup. This will take 5-10 minutes." -ForegroundColor Yellow
     Write-Host "You can monitor progress with:" -ForegroundColor Yellow
-    Write-Host "  multipass exec '$($script:Options.Name)' -- cloud-init status --wait" -ForegroundColor Cyan
-    Write-Host "  multipass exec '$($script:Options.Name)' -- journalctl -u cloud-final -f" -ForegroundColor Cyan
+    Write-Host "  multipass exec '$($Options.Name)' -- cloud-init status --wait" -ForegroundColor Cyan
+    Write-Host "  multipass exec '$($Options.Name)' -- journalctl -u cloud-final -f" -ForegroundColor Cyan
     Write-Host ""
 
     $monitor = Read-Host "Monitor deployment progress? [Y/n]"
     if ($monitor -ne 'n' -and $monitor -ne 'N') {
         Write-Host "Waiting for cloud-init to complete..." -ForegroundColor Yellow
-        multipass exec $script:Options.Name -- cloud-init status --wait
+        multipass exec $Options.Name -- cloud-init status --wait
         Write-Host "✓ Cloud-init completed!" -ForegroundColor Green
     }
 }
@@ -506,6 +514,10 @@ function Watch-Deployment {
 #region Deployment Setup
 
 function Configure-Headscale {
+    param(
+        [hashtable]$Options = $script:Options
+    )
+
     Write-Host ""
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host "  Configuring Headscale" -ForegroundColor Cyan
@@ -515,15 +527,18 @@ function Configure-Headscale {
     Write-Host "Applying configuration to VM..." -ForegroundColor Yellow
 
     # Call the existing headscale-config script with environment variables
-    try {
-        multipass exec $script:Options.Name -- sudo bash -c @"
-export HEADSCALE_DOMAIN='$($script:Options.Domain)'
-export AZURE_TENANT_ID='$($script:Options.AzureTenantID)'
-export AZURE_CLIENT_ID='$($script:Options.AzureClientID)'
-export AZURE_CLIENT_SECRET='$($script:Options.AzureClientSecret)'
-export ALLOWED_EMAIL='$($script:Options.AzureAllowedEmail)'
+    # Pipe script via stdin to avoid exposing secrets in ps aux
+    $configScript = @"
+export HEADSCALE_DOMAIN='$($Options.Domain)'
+export AZURE_TENANT_ID='$($Options.AzureTenantID)'
+export AZURE_CLIENT_ID='$($Options.AzureClientID)'
+export AZURE_CLIENT_SECRET='$($Options.AzureClientSecret)'
+export ALLOWED_EMAIL='$($Options.AzureAllowedEmail)'
 /usr/local/bin/headscale-config
 "@
+
+    try {
+        $configScript | multipass exec $Options.Name -- sudo bash
         Write-Host "✓ Configuration applied successfully!" -ForegroundColor Green
     } catch {
         Write-Host "✗ Failed to apply configuration: $_" -ForegroundColor Red
@@ -532,6 +547,10 @@ export ALLOWED_EMAIL='$($script:Options.AzureAllowedEmail)'
 }
 
 function Configure-Ngrok {
+    param(
+        [hashtable]$Options = $script:Options
+    )
+
     Write-Host ""
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host "  Authenticating Ngrok" -ForegroundColor Cyan
@@ -542,7 +561,7 @@ function Configure-Ngrok {
 
     # Call the existing headscale-config script with environment variables
     try {
-        multipass exec $script:Options.Name -- ngrok config add-authtoken $script:Options.NgrokToken
+        multipass exec $Options.Name -- ngrok config add-authtoken $Options.NgrokToken
         Write-Host "✓ Authenticated successfully!" -ForegroundColor Green
     } catch {
         Write-Host "✗ Failed to apply configuration: $_" -ForegroundColor Red
@@ -551,6 +570,10 @@ function Configure-Ngrok {
 }
 
 function Start-Ngrok {
+    param(
+        [hashtable]$Options = $script:Options
+    )
+
     Write-Host ""
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host "  Starting Ngrok Tunnel" -ForegroundColor Cyan
@@ -569,6 +592,10 @@ function Start-Ngrok {
 }
 
 function Install-Ngrok {
+    param(
+        [hashtable]$Options = $script:Options
+    )
+
     Write-Host ""
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host "  Installing ngrok (Testing Only)" -ForegroundColor Cyan
@@ -592,7 +619,7 @@ echo '✓ ngrok installed: '`$(ngrok version)
 
     try {
         # Install ngrok binary
-        $installScript | multipass exec $($script:Options.Name) -- sudo bash
+        $installScript | multipass exec $($Options.Name) -- sudo bash
 
         Write-Host "✓ ngrok installed successfully!" -ForegroundColor Green
     } catch {
@@ -606,46 +633,64 @@ echo '✓ ngrok installed: '`$(ngrok version)
 
 function Show-VMInfo {
     param(
-        [string]$VMIP
+        [string]$VMIP,
+        [hashtable]$Options = $script:Options
     )
 
     Write-Host "VM Information:" -ForegroundColor Cyan
-    Write-Host "  Name: '$($script:Options.Name)'" -ForegroundColor White
+    Write-Host "  Name: '$($Options.Name)'" -ForegroundColor White
     Write-Host "  IP:   $VMIP" -ForegroundColor White
     Write-Host ""
 }
 
 function Show-URLs {
+    param(
+        [hashtable]$Options = $script:Options
+    )
+
     Write-Host "Access URLs:" -ForegroundColor Cyan
-    Write-Host "  Headplane UI:  https://$($script:Options.Domain)/admin" -ForegroundColor White
-    Write-Host "  Headscale API: https://$($script:Options.Domain)/api" -ForegroundColor White
+    Write-Host "  Headplane UI:  https://$($Options.Domain)/admin" -ForegroundColor White
+    Write-Host "  Headscale API: https://$($Options.Domain)/api" -ForegroundColor White
     Write-Host ""
 }
 
 function Show-HeadplaneStatus {
+    param(
+        [hashtable]$Options = $script:Options
+    )
+
     Write-Host "Headplane Status:" -ForegroundColor Cyan
-    multipass exec $script:Options.Name -- systemctl status headplane
+    multipass exec $Options.Name -- systemctl status headplane
     Write-Host ""
 }
 
 function Show-HeadscaleHealth {
+    param(
+        [hashtable]$Options = $script:Options
+    )
+
     Write-Host "Headscale Health Check:" -ForegroundColor Cyan
-    multipass exec $script:Options.Name -- sudo headscale-healthcheck
+    multipass exec $Options.Name -- sudo headscale-healthcheck
     Write-Host ""
 }
 
 function Show-TroubleshootingInfo {
+    param(
+        [hashtable]$Options = $script:Options
+    )
+
     Write-Host "Troubleshooting:" -ForegroundColor Cyan
-    Write-Host "  View logs:    multipass exec '$($script:Options.Name)' -- journalctl -u headscale -f" -ForegroundColor White
-    Write-Host "  View setup:   multipass exec '$($script:Options.Name)' -- cat /var/log/cloud-init-output.log" -ForegroundColor White
-    Write-Host "  Stop VM:      multipass stop '$($script:Options.Name)'" -ForegroundColor White
-    Write-Host "  Delete VM:    multipass delete '$($script:Options.Name)' && multipass purge" -ForegroundColor White
+    Write-Host "  View logs:    multipass exec '$($Options.Name)' -- journalctl -u headscale -f" -ForegroundColor White
+    Write-Host "  View setup:   multipass exec '$($Options.Name)' -- cat /var/log/cloud-init-output.log" -ForegroundColor White
+    Write-Host "  Stop VM:      multipass stop '$($Options.Name)'" -ForegroundColor White
+    Write-Host "  Delete VM:    multipass delete '$($Options.Name)' && multipass purge" -ForegroundColor White
     Write-Host ""
 }
 
 function Show-DeploymentSummary {
     param(
-        [string]$VMIP
+        [string]$VMIP,
+        [hashtable]$Options = $script:Options
     )
 
     Write-Host ""
@@ -654,20 +699,20 @@ function Show-DeploymentSummary {
     Write-Host "========================================" -ForegroundColor Green
     Write-Host ""
 
-    Show-VMInfo -VMIP $VMIP
-    Show-URLs
-    Show-HeadplaneStatus
-    Show-HeadscaleHealth
+    Show-VMInfo -VMIP $VMIP -Options $Options
+    Show-URLs -Options $Options
+    Show-HeadplaneStatus -Options $Options
+    Show-HeadscaleHealth -Options $Options
 
     Write-Host "Next Steps:" -ForegroundColor Cyan
     Write-Host "1. Connect a Tailscale client:" -ForegroundColor Yellow
-    Write-Host "   tailscale up --login-server https://$($script:Options.Domain)" -ForegroundColor White
+    Write-Host "   tailscale up --login-server https://$($Options.Domain)" -ForegroundColor White
     Write-Host ""
     Write-Host "2. SSH into VM for direct access:" -ForegroundColor Yellow
-    Write-Host "   multipass shell '$($script:Options.Name)'" -ForegroundColor White
+    Write-Host "   multipass shell '$($Options.Name)'" -ForegroundColor White
     Write-Host ""
 
-    Show-TroubleshootingInfo
+    Show-TroubleshootingInfo -Options $Options
 }
 
 #endregion
