@@ -63,7 +63,9 @@ $ErrorActionPreference = "Stop"
 
 New-Module -Name VPS.Headscale.Testing -ScriptBlock {
 param(
-    [hashtable] $CLI
+    [hashtable] $CLI,
+    [string] $ConfigFile,
+    [switch] $Import
 )
 
 $ErrorActionPreference = "Stop"
@@ -363,7 +365,7 @@ function Get-Config {
 
 # Capture CLI-provided Options from parameters
 # Get infrastructure configuration (script-scoped for use in functions)
-$ModuleScope.Options = Get-Config -CliOptions $CLI -ConfigFilePath $ConfigFile -ShowSummary $true -RequireConfirmation $true
+$ModuleScope.Options = Get-Config -CliOptions $CLI -ConfigFilePath $ConfigFile -ShowSummary $true -RequireConfirmation (-not $Import)
 
 function Save-Config {
     param(
@@ -850,10 +852,10 @@ If(-not $Import) {
     Network = $Network
 
     Domain = $Domain
-    
+
     NgrokToken = $NgrokToken
     AzureTenantID = $AzureTenantID
     AzureClientID = $AzureClientID
     AzureClientSecret = $AzureClientSecret
     AzureAllowedEmail = $AzureAllowedEmail
-}) | Import-Module -Force
+}), $ConfigFile, $Import | Import-Module -Force
