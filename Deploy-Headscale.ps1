@@ -16,20 +16,43 @@
 
 [CmdletBinding()]
 param(
+    [ValidatePattern('^[a-zA-Z0-9][a-zA-Z0-9-]*$')]
     [string]$Name,
+
+    [ValidatePattern('^\d+[MG]$')]
     [string]$Memory,
+
+    [ValidatePattern('^\d+G$')]
     [string]$Disk,
+
+    [ValidateRange(1, 32)]
     [int]$CPUs,
+    
     [string]$Network,
 
+    [ValidatePattern('^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$')]
     [string]$Domain,
 
+    [ValidatePattern('^[a-zA-Z0-9_-]+$')]
     [string]$NgrokToken,
+
+    [ValidatePattern('^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')]
     [string]$AzureTenantID,
+
+    [ValidatePattern('^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$')]
     [string]$AzureClientID,
+
     [string]$AzureClientSecret,
+
+    [ValidatePattern('^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')]
     [string]$AzureAllowedEmail,
 
+    [ValidateScript({
+        if ($_ -and -not (Test-Path $_)) {
+            throw "Config file not found: $_"
+        }
+        $true
+    })]
     [string]$ConfigFile
 )
 
