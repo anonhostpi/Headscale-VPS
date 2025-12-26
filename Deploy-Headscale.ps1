@@ -615,22 +615,18 @@ function Install-Ngrok {
 
     Write-Host "Installing ngrok inside VM..." -ForegroundColor Yellow
 
-    # Download and install ngrok
-    $installScript = @"
-#!/bin/bash
-set -e
-curl -sSL https://ngrok-agent.s3.amazonaws.com/ngrok.asc \
-  | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null \
-  && echo "deb https://ngrok-agent.s3.amazonaws.com bookworm main" \
-  | sudo tee /etc/apt/sources.list.d/ngrok.list \
-  && sudo apt update \
-  && sudo apt install ngrok
-echo '✓ ngrok installed: '`$(ngrok version)
-"@
+    # Download and install ngrok using bash -c to avoid stdin blocking
+    $cmd = (@(
+        "curl -sSL https://ngrok-agent.s3.amazonaws.com/ngrok.asc | tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null"
+        "echo 'deb https://ngrok-agent.s3.amazonaws.com bookworm main' | tee /etc/apt/sources.list.d/ngrok.list"
+        "apt update"
+        "apt install -y ngrok"
+        "echo '✓ ngrok installed: `$(ngrok version)'"
+    ) -join " && ")
 
     try {
         # Install ngrok binary
-        $installScript | multipass exec $($Options.Name) -- sudo bash
+        multipass exec $($Options.Name) -- sudo bash -c $cmd
 
         Write-Host "✓ ngrok installed successfully!" -ForegroundColor Green
     } catch {
