@@ -498,17 +498,10 @@ function Watch-Deployment {
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "Cloud-init is now running setup. This will take 5-10 minutes." -ForegroundColor Yellow
-    Write-Host "You can monitor progress with:" -ForegroundColor Yellow
-    Write-Host "  multipass exec '$($Options.Name)' -- cloud-init status --wait" -ForegroundColor Cyan
-    Write-Host "  multipass exec '$($Options.Name)' -- journalctl -u cloud-final -f" -ForegroundColor Cyan
-    Write-Host ""
+    Write-Host "Waiting for cloud-init to complete..." -ForegroundColor Yellow
 
-    $monitor = Read-Host "Monitor deployment progress? [Y/n]"
-    if ($monitor -ne 'n' -and $monitor -ne 'N') {
-        Write-Host "Waiting for cloud-init to complete..." -ForegroundColor Yellow
-        multipass exec $Options.Name -- cloud-init status --wait
-        Write-Host "✓ Cloud-init completed!" -ForegroundColor Green
-    }
+    multipass exec $Options.Name -- cloud-init status --wait
+    Write-Host "✓ Cloud-init completed!" -ForegroundColor Green
 }
 
 #endregion
