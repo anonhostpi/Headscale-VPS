@@ -10,30 +10,143 @@
 
 .EXAMPLE
     .\Deploy-Headscale.ps1
-    .\Deploy-Headscale.ps1 -VMName "test" -Memory "4G" -CPUs 4
+    .\Deploy-Headscale.ps1 -Name "test" -Memory "4G" -CPUs 4
     .\Deploy-Headscale.ps1 -ConfigFile ".\my-config.json"
 #>
 
 [CmdletBinding()]
 param(
-    [string]$VMName,
+    [string]$Name,
     [string]$Memory,
     [string]$Disk,
     [int]$CPUs,
-    [string]$ConfigFile = "",
     [string]$Network,
-    [string]$NgrokAuthToken,
-    [string]$NgrokDomain
+
+    [string]$Domain,
+
+    [string]$NgrokToken,
+    [string]$AzureTenantID,
+    [string]$AzureClientID,
+    [string]$AzureClientSecret,
+    [string]$AzureAllowedEmail,
+
+    [string]$ConfigFile
 )
 
 $ErrorActionPreference = "Stop"
 
-$script:Defaults = @{
-    ConfigFile = ".\config.json"
-    VMName = "headscale-test"
-    Memory = "2G"
-    Disk = "20G"
-    CPUs = 2
+#region Configuration
+
+# Define infrastructure required arguments with validation metadata
+$script:Required = [ordered]@{
+    ConfigFile = @{
+        Prompt = "Path to configuration file (leave blank to use defaults)"
+        ValidationType = "None"
+        IsSecret = $false
+
+        DefaultValue = ".\config.json"
+        SummaryLabel = "Config File"
+    }
+
+    # General infrastructure options
+    Domain = @{
+        Prompt = "Ngrok domain (e.g., your-domain.ngrok-free.dev)"
+        ValidationType = "Domain"
+        IsSecret = $false
+
+        # DefaultValue = ""
+        SummaryLabel = "Ngrok Domain"
+    }
+
+    # VM configuration options
+    Name = @{
+        Prompt = "Multipass VM name"
+        ValidationType = "None"
+        IsSecret = $false
+
+        DefaultValue = "headscale-test"
+        SummaryLabel = "VM Name"
+    }
+    Memory = @{
+        Prompt = "VM Memory (e.g., '2G', '2048M')"
+        ValidationType = "None"
+        IsSecret = $false
+
+        DefaultValue = "2G"
+        SummaryLabel = "Memory"
+    }
+    Disk = @{
+        Prompt = "VM Disk size (e.g., '20G', '20480M')"
+        ValidationType = "None"
+        IsSecret = $false
+
+        DefaultValue = "20G"
+        SummaryLabel = "Disk"
+    }
+    CPUs = @{
+        Prompt = "Number of CPU cores"
+        ValidationType = "None"
+        IsSecret = $false
+
+        DefaultValue = 2
+        SummaryLabel = "CPUs"
+    }
+    Network = @{
+        Prompt = "Network adapter name (e.g., 'Ethernet 3', 'Wi-Fi')"
+        ValidationType = "None"
+        IsSecret = $false
+
+        # DefaultValue = "Wi-Fi"
+        SummaryLabel = "Network"
+    }
+
+    # Authentication options
+    NgrokToken = @{
+        Prompt = "Ngrok auth token"
+        ValidationType = "None"
+        IsSecret = $true
+
+        # DefaultValue = ""
+        SummaryLabel = "Ngrok Auth Token"
+    }
+    AzureTenantID = @{
+        Prompt = "Azure Tenant ID (as in the GUID)"
+        ValidationType = "UUID"
+        IsSecret = $false
+
+        # DefaultValue = ""
+        SummaryLabel = "Tenant ID"
+    }
+    AzureClientID = @{
+        Prompt = "Azure Application (Client) ID"
+        ValidationType = "UUID"
+        IsSecret = $false
+
+        # DefaultValue = ""
+        SummaryLabel = "Client ID"
+    }
+    AzureClientSecret = @{
+        Prompt = "Azure Client Secret Value"
+        ValidationType = "None"
+        IsSecret = $true
+
+        # DefaultValue = ""
+        SummaryLabel = "Client Secret"
+    }
+    AzureAllowedEmail = @{
+        Prompt = "Allowed Email Address for Azure AD login"
+        ValidationType = "Email"
+        IsSecret = $false
+
+        # DefaultValue = ""
+        SummaryLabel = "Allowed Email"
+    }
+}
+
+$script:Defaults = [ordered]@{}
+
+foreach ($key in $script:Required.Keys) {
+    $script:Defaults[$key] = $script:Required[$key].DefaultValue
 }
 
 function Get-ConfigValue {
@@ -100,12 +213,11 @@ function Get-ConfigValue {
 }
 
 # Get merged configuration with proper priority:
-# CLI options (highest) → JSON config (primary fallback) → Hardcoded defaults (secondary fallback)
+# CLI Options (highest) → JSON config (primary fallback) → Hardcoded defaults (secondary fallback)
 function Get-Config {
     param(
         [hashtable]$CliOptions,
         [string]$ConfigFilePath,
-        [hashtable]$RequiredArgs = @{},
         [string]$BannerTitle = "",
         [scriptblock]$PrePromptMessage = $null,
         [bool]$ShowSummary = $false,
@@ -151,7 +263,7 @@ function Get-Config {
         }
     }
 
-    # Apply CLI options (highest priority - overrides everything)
+    # Apply CLI Options (highest priority - overrides everything)
     foreach ($key in $CliOptions.Keys) {
         if ($null -ne $CliOptions[$key] -and $CliOptions[$key] -ne "" -and $CliOptions[$key] -ne 0) {
             $config[$key] = $CliOptions[$key]
@@ -159,11 +271,11 @@ function Get-Config {
     }
 
     # Prompt for missing required arguments
-    foreach ($argName in $RequiredArgs.Keys) {
+    foreach ($argName in $script:Required.Keys) {
         # Check if argument is missing or empty
         if (-not $config.ContainsKey($argName) -or [string]::IsNullOrWhiteSpace($config[$argName])) {
-            # Get metadata for this argument from RequiredArgs
-            $metadata = $RequiredArgs[$argName]
+            # Get metadata for this argument from required args
+            $metadata = $script:Required[$argName]
 
             # Use metadata to configure prompt with defaults from config
             $defaultValue = if ($metadata.DefaultValue) {
@@ -191,8 +303,8 @@ function Get-Config {
     if ($ShowSummary) {
         Write-Host ""
         Write-Host "Configuration Summary:" -ForegroundColor Cyan
-        foreach ($argName in $RequiredArgs.Keys) {
-            $metadata = $RequiredArgs[$argName]
+        foreach ($argName in $script:Required.Keys) {
+            $metadata = $script:Required[$argName]
             $displayValue = if ($metadata.IsSecret) { "****" } else { $config[$argName] }
             $label = if ($metadata.SummaryLabel) { $metadata.SummaryLabel } else { $argName }
             Write-Host "  ${label}: $displayValue" -ForegroundColor White
@@ -212,7 +324,23 @@ function Get-Config {
     return $config
 }
 
-#region Configuration Functions
+# Capture CLI-provided Options from parameters
+# Get infrastructure configuration (script-scoped for use in functions)
+$script:Options = Get-Config -CliOptions (@{
+    Name = $Name
+    Memory = $Memory
+    Disk = $Disk
+    CPUs = $CPUs
+    Network = $Network
+
+    Domain = $Domain
+    
+    NgrokToken = $NgrokToken
+    AzureTenantID = $AzureTenantID
+    AzureClientID = $AzureClientID
+    AzureClientSecret = $AzureClientSecret
+    AzureAllowedEmail = $AzureAllowedEmail
+}) -ConfigFilePath $ConfigFile -ShowSummary $true -RequireConfirmation $true
 
 function Test-Prerequisites {
     Write-Host "Checking prerequisites..." -ForegroundColor Yellow
@@ -242,24 +370,6 @@ function Test-Prerequisites {
 
 #endregion
 
-#region Ngrok Info
-
-function Show-NgrokInfo {
-    Write-Host "========================================" -ForegroundColor Cyan
-    Write-Host "  ngrok Configuration" -ForegroundColor Cyan
-    Write-Host "========================================" -ForegroundColor Cyan
-    Write-Host ""
-
-    Write-Host "ngrok will be installed inside the VM with:" -ForegroundColor Yellow
-    Write-Host "  Authtoken: $($options.NgrokAuthToken)" -ForegroundColor White
-    Write-Host "  Domain:    https://$($options.NgrokDomain)" -ForegroundColor White
-    Write-Host ""
-    Write-Host "After deployment, you'll start ngrok from inside the VM." -ForegroundColor Yellow
-    Write-Host ""
-}
-
-#endregion
-
 #region VM Deployment
 
 function Start-MultipassVM {
@@ -270,22 +380,22 @@ function Start-MultipassVM {
     Write-Host ""
 
     Write-Host "VM Configuration:" -ForegroundColor Yellow
-    Write-Host "  Name:    $($options.VMName)" -ForegroundColor White
-    Write-Host "  Memory:  $($options.Memory)" -ForegroundColor White
-    Write-Host "  Disk:    $($options.Disk)" -ForegroundColor White
-    Write-Host "  CPUs:    $($options.CPUs)" -ForegroundColor White
-    Write-Host "  Network: $($options.Network)" -ForegroundColor White
+    Write-Host "  Name:    $($script:Options.Name)" -ForegroundColor White
+    Write-Host "  Memory:  $($script:Options.Memory)" -ForegroundColor White
+    Write-Host "  Disk:    $($script:Options.Disk)" -ForegroundColor White
+    Write-Host "  CPUs:    $($script:Options.CPUs)" -ForegroundColor White
+    Write-Host "  Network: $($script:Options.Network)" -ForegroundColor White
     Write-Host ""
 
     # Check if VM already exists
     try {
-        $existingVM = multipass list | Select-String $options.VMName
+        $existingVM = multipass list | Select-String $script:Options.Name
         if ($existingVM) {
-            Write-Host "VM '$($options.VMName)' already exists!" -ForegroundColor Yellow
+            Write-Host "VM '$($script:Options.Name)' already exists!" -ForegroundColor Yellow
             $overwrite = Read-Host "Delete and recreate? [y/N]"
             if ($overwrite -eq 'y' -or $overwrite -eq 'Y') {
                 Write-Host "Deleting existing VM..." -ForegroundColor Yellow
-                multipass delete $options.VMName
+                multipass delete $script:Options.Name
                 multipass purge
             } else {
                 Write-Host "Deployment cancelled." -ForegroundColor Yellow
@@ -299,12 +409,12 @@ function Start-MultipassVM {
     Write-Host "Launching VM (this may take several minutes)..." -ForegroundColor Yellow
 
     try {
-        multipass launch --name $options.VMName `
+        multipass launch --name $script:Options.Name `
             --cloud-init .\cloud-init.yml `
-            --memory $options.Memory `
-            --disk $options.Disk `
-            --cpus $options.CPUs `
-            --network $options.Network `
+            --memory $script:Options.Memory `
+            --disk $script:Options.Disk `
+            --cpus $script:Options.CPUs `
+            --network $script:Options.Network `
             22.04
 
         Write-Host "✓ VM launched successfully!" -ForegroundColor Green
@@ -315,7 +425,7 @@ function Start-MultipassVM {
 
     # Get VM IP
     Start-Sleep -Seconds 5
-    $vmInfo = multipass info $options.VMName
+    $vmInfo = multipass info $script:Options.Name
     $ipMatch = $vmInfo | Select-String "IPv4:\s+(\d+\.\d+\.\d+\.\d+)"
     if ($ipMatch) {
         $vmIP = $ipMatch.Matches.Groups[1].Value
@@ -328,8 +438,6 @@ function Start-MultipassVM {
 }
 
 function Watch-Deployment {
-    param([string]$VMName)
-
     Write-Host ""
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host "  Monitoring Deployment" -ForegroundColor Cyan
@@ -337,24 +445,19 @@ function Watch-Deployment {
     Write-Host ""
     Write-Host "Cloud-init is now running setup. This will take 5-10 minutes." -ForegroundColor Yellow
     Write-Host "You can monitor progress with:" -ForegroundColor Yellow
-    Write-Host "  multipass exec $VMName -- cloud-init status --wait" -ForegroundColor Cyan
-    Write-Host "  multipass exec $VMName -- journalctl -u cloud-final -f" -ForegroundColor Cyan
+    Write-Host "  multipass exec $($script:Options.Name) -- cloud-init status --wait" -ForegroundColor Cyan
+    Write-Host "  multipass exec $($script:Options.Name) -- journalctl -u cloud-final -f" -ForegroundColor Cyan
     Write-Host ""
 
     $monitor = Read-Host "Monitor deployment progress? [Y/n]"
     if ($monitor -ne 'n' -and $monitor -ne 'N') {
         Write-Host "Waiting for cloud-init to complete..." -ForegroundColor Yellow
-        multipass exec $VMName -- cloud-init status --wait
+        multipass exec $($script:Options.Name) -- cloud-init status --wait
         Write-Host "✓ Cloud-init completed!" -ForegroundColor Green
     }
 }
 
 function Configure-Headscale {
-    param(
-        [string]$VMName,
-        [hashtable]$Config
-    )
-
     Write-Host ""
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host "  Configuring Headscale" -ForegroundColor Cyan
@@ -365,12 +468,12 @@ function Configure-Headscale {
 
     # Call the existing headscale-config script with environment variables
     try {
-        multipass exec $VMName -- sudo bash -c @"
-export HEADSCALE_DOMAIN='$($Config.HEADSCALE_DOMAIN)'
-export AZURE_TENANT_ID='$($Config.AZURE_TENANT_ID)'
-export AZURE_CLIENT_ID='$($Config.AZURE_CLIENT_ID)'
-export AZURE_CLIENT_SECRET='$($Config.AZURE_CLIENT_SECRET)'
-export ALLOWED_EMAIL='$($Config.ALLOWED_EMAIL)'
+        multipass exec $($script:Options.Name) -- sudo bash -c @"
+export HEADSCALE_DOMAIN='$($script:Options.Domain)'
+export AZURE_TENANT_ID='$($script:Options.AzureTenantID)'
+export AZURE_CLIENT_ID='$($script:Options.AzureClientID)'
+export AZURE_CLIENT_SECRET='$($script:Options.AzureClientSecret)'
+export ALLOWED_EMAIL='$($script:Options.AzureAllowedEmail)'
 /usr/local/bin/headscale-config
 "@
         Write-Host "✓ Configuration applied successfully!" -ForegroundColor Green
@@ -381,8 +484,6 @@ export ALLOWED_EMAIL='$($Config.ALLOWED_EMAIL)'
 }
 
 function Install-Ngrok {
-    param([string]$VMName)
-
     Write-Host ""
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host "  Installing ngrok (Testing Only)" -ForegroundColor Cyan
@@ -397,23 +498,23 @@ function Install-Ngrok {
 set -e
 echo 'Downloading ngrok...'
 NGROK_VERSION='v3-stable'
-curl -sSL https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-\${NGROK_VERSION}-linux-amd64.tgz -o /tmp/ngrok.tgz
+curl -sSL https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-\`${NGROK_VERSION}-linux-amd64.tgz -o /tmp/ngrok.tgz
 tar -xzf /tmp/ngrok.tgz -C /usr/local/bin
 chmod +x /usr/local/bin/ngrok
 rm /tmp/ngrok.tgz
-echo '✓ ngrok installed: '\$(ngrok version)
+echo '✓ ngrok installed: '`$(ngrok version)
 "@
 
     try {
         # Install ngrok binary
-        $installScript | multipass exec $VMName -- sudo bash
+        $installScript | multipass exec $($script:Options.Name) -- sudo bash
 
         # Create start-ngrok-tunnel helper script
         $tunnelScript = @"
 #!/bin/bash
 # Start ngrok tunnel for Headscale testing
-AUTHTOKEN='$($options.NgrokAuthToken)'
-DOMAIN='$($options.NgrokDomain)'
+AUTHTOKEN='$($script:Options.NgrokToken)'
+DOMAIN='$($script:Options.Domain)'
 
 echo '=========================================='
 echo '  Starting ngrok tunnel'
@@ -423,21 +524,21 @@ echo ''
 # Configure authtoken if not already done
 if [ ! -f ~/.ngrok2/ngrok.yml ]; then
   echo 'Configuring ngrok authtoken...'
-  ngrok config add-authtoken '\$AUTHTOKEN'
+  ngrok config add-authtoken '`$AUTHTOKEN'
 fi
 
 echo 'Tunnel configuration:'
-echo '  Domain: https://'\$DOMAIN
+echo '  Domain: https://'`$DOMAIN
 echo '  Target: https://localhost:443'
 echo ''
 echo 'Starting tunnel... (Press Ctrl+C to stop)'
 echo ''
 
 # Start tunnel with static domain
-ngrok http --domain='\$DOMAIN' https://localhost:443
+ngrok http --domain='`$DOMAIN' https://localhost:443
 "@
 
-        $tunnelScript | multipass exec $VMName -- sudo bash -c "cat > /usr/local/bin/start-ngrok-tunnel && chmod +x /usr/local/bin/start-ngrok-tunnel"
+        $tunnelScript | multipass exec $($script:Options.Name) -- sudo bash -c "cat > /usr/local/bin/start-ngrok-tunnel && chmod +x /usr/local/bin/start-ngrok-tunnel"
 
         Write-Host "✓ ngrok installed successfully!" -ForegroundColor Green
         Write-Host "✓ start-ngrok-tunnel helper created" -ForegroundColor Green
@@ -453,9 +554,7 @@ ngrok http --domain='\$DOMAIN' https://localhost:443
 
 function Show-DeploymentSummary {
     param(
-        [string]$VMName,
-        [string]$VMIP,
-        [hashtable]$Config
+        [string]$VMIP
     )
 
     Write-Host ""
@@ -465,39 +564,39 @@ function Show-DeploymentSummary {
     Write-Host ""
 
     Write-Host "VM Information:" -ForegroundColor Cyan
-    Write-Host "  Name: $VMName" -ForegroundColor White
+    Write-Host "  Name: $($script:Options.Name)" -ForegroundColor White
     Write-Host "  IP:   $VMIP" -ForegroundColor White
     Write-Host ""
 
     Write-Host "Access URLs:" -ForegroundColor Cyan
-    Write-Host "  Headplane UI:  https://$($Config.HEADSCALE_DOMAIN)/admin" -ForegroundColor White
-    Write-Host "  Headscale API: https://$($Config.HEADSCALE_DOMAIN)/api" -ForegroundColor White
+    Write-Host "  Headplane UI:  https://$($script:Options.Domain)/admin" -ForegroundColor White
+    Write-Host "  Headscale API: https://$($script:Options.Domain)/api" -ForegroundColor White
     Write-Host ""
 
     Write-Host "Next Steps:" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "1. Start ngrok tunnel (in a separate terminal):" -ForegroundColor Yellow
-    Write-Host "   multipass exec $VMName -- start-ngrok-tunnel" -ForegroundColor White
-    Write-Host "   This creates the tunnel: https://$($options.NgrokDomain) -> VM:443" -ForegroundColor Cyan
+    Write-Host "   multipass exec $($script:Options.Name) -- start-ngrok-tunnel" -ForegroundColor White
+    Write-Host "   This creates the tunnel: https://$($script:Options.Domain) -> VM:443" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "2. Verify Headplane is running:" -ForegroundColor Yellow
-    Write-Host "   multipass exec $VMName -- systemctl status headplane" -ForegroundColor White
+    Write-Host "   multipass exec $($script:Options.Name) -- systemctl status headplane" -ForegroundColor White
     Write-Host ""
     Write-Host "3. Connect a Tailscale client:" -ForegroundColor Yellow
-    Write-Host "   tailscale up --login-server https://$($Config.HEADSCALE_DOMAIN)" -ForegroundColor White
+    Write-Host "   tailscale up --login-server https://$($script:Options.Domain)" -ForegroundColor White
     Write-Host ""
     Write-Host "4. SSH into VM for direct access:" -ForegroundColor Yellow
-    Write-Host "   multipass shell $VMName" -ForegroundColor White
+    Write-Host "   multipass shell $($script:Options.Name)" -ForegroundColor White
     Write-Host ""
     Write-Host "5. View health status:" -ForegroundColor Yellow
-    Write-Host "   multipass exec $VMName -- sudo headscale-healthcheck" -ForegroundColor White
+    Write-Host "   multipass exec $($script:Options.Name) -- sudo headscale-healthcheck" -ForegroundColor White
     Write-Host ""
 
     Write-Host "Troubleshooting:" -ForegroundColor Cyan
-    Write-Host "  View logs:    multipass exec $VMName -- journalctl -u headscale -f" -ForegroundColor White
-    Write-Host "  View setup:   multipass exec $VMName -- cat /var/log/cloud-init-output.log" -ForegroundColor White
-    Write-Host "  Stop VM:      multipass stop $VMName" -ForegroundColor White
-    Write-Host "  Delete VM:    multipass delete $VMName && multipass purge" -ForegroundColor White
+    Write-Host "  View logs:    multipass exec $($script:Options.Name) -- journalctl -u headscale -f" -ForegroundColor White
+    Write-Host "  View setup:   multipass exec $($script:Options.Name) -- cat /var/log/cloud-init-output.log" -ForegroundColor White
+    Write-Host "  Stop VM:      multipass stop $($script:Options.Name)" -ForegroundColor White
+    Write-Host "  Delete VM:    multipass delete $($script:Options.Name) && multipass purge" -ForegroundColor White
     Write-Host ""
 }
 
@@ -517,131 +616,29 @@ function Main {
 See TESTING.md for full documentation.
 
 "@ -ForegroundColor Cyan
-
-        # Define infrastructure required arguments with validation metadata
-        $infraRequiredArgs = @{
-            Network = @{
-                Prompt = "Network adapter name (e.g., 'Ethernet 3', 'Wi-Fi')"
-                ValidationType = "None"
-                IsSecret = $false
-            }
-            NgrokAuthToken = @{
-                Prompt = "Ngrok auth token"
-                ValidationType = "None"
-                IsSecret = $true
-            }
-            NgrokDomain = @{
-                Prompt = "Ngrok domain (e.g., your-domain.ngrok-free.dev)"
-                ValidationType = "Domain"
-                IsSecret = $false
-            }
-        }
-
-        # Capture CLI-provided options from parameters
-        # Get infrastructure configuration (script-scoped for use in functions)
-        $script:options = Get-Config -CliOptions (@{
-            VMName = $VMName
-            Memory = $Memory
-            Disk = $Disk
-            CPUs = $CPUs
-            Network = $Network
-            NgrokAuthToken = $NgrokAuthToken
-            NgrokDomain = $NgrokDomain
-        }) -ConfigFilePath $ConfigFile -RequiredArgs $infraRequiredArgs
-
         # Prerequisites
         Test-Prerequisites
-
-        # Application configuration with banner, summary, and confirmation
-        $appRequiredArgs = @{
-            HEADSCALE_DOMAIN = @{
-                Prompt = "Headscale Domain (e.g., $($options.NgrokDomain))"
-                DefaultValue = { $options.NgrokDomain }
-                ValidationType = "Domain"
-                IsSecret = $false
-                SummaryLabel = "Domain"
-            }
-            AZURE_TENANT_ID = @{
-                Prompt = "Azure Tenant ID (e.g., contoso.onmicrosoft.com or GUID)"
-                DefaultValue = { $options.AZURE_TENANT_ID }
-                ValidationType = "UUID"
-                IsSecret = $false
-                SummaryLabel = "Tenant ID"
-            }
-            AZURE_CLIENT_ID = @{
-                Prompt = "Azure Application (Client) ID"
-                DefaultValue = { $options.AZURE_CLIENT_ID }
-                ValidationType = "UUID"
-                IsSecret = $false
-                SummaryLabel = "Client ID"
-            }
-            AZURE_CLIENT_SECRET = @{
-                Prompt = "Azure Client Secret Value"
-                DefaultValue = { $options.AZURE_CLIENT_SECRET }
-                ValidationType = "None"
-                IsSecret = $true
-                SummaryLabel = "Client Secret"
-            }
-            ALLOWED_EMAIL = @{
-                Prompt = "Allowed Email Address for login"
-                DefaultValue = { $options.ALLOWED_EMAIL }
-                ValidationType = "Email"
-                IsSecret = $false
-                SummaryLabel = "Allowed Email"
-            }
-        }
-
-        $prePromptMsg = {
-            Write-Host "Ngrok will be used for OAuth callbacks:" -ForegroundColor Yellow
-            Write-Host "  Domain: https://$($options.NgrokDomain)" -ForegroundColor Cyan
-            Write-Host ""
-            Write-Host "Note: You can use the ngrok domain OR a custom domain for Headscale." -ForegroundColor Yellow
-            Write-Host "      If using custom domain, ensure DNS points to the VM IP." -ForegroundColor Yellow
-            Write-Host ""
-        }
-
-        $config = Get-Config `
-            -CliOptions @{} `
-            -ConfigFilePath $ConfigFile `
-            -RequiredArgs $appRequiredArgs `
-            -BannerTitle "Configuration" `
-            -PrePromptMessage $prePromptMsg `
-            -ShowSummary $true `
-            -RequireConfirmation $true
-
-        # ngrok info
-        Show-NgrokInfo
 
         # Launch VM with base cloud-init
         $vmIP = Start-MultipassVM
 
         # Monitor deployment (waits for cloud-init)
-        Watch-Deployment -VMName $options.VMName
+        Watch-Deployment
 
         # Configure Headscale after cloud-init completes
-        Configure-Headscale -VMName $options.VMName -Config $config
+        Configure-Headscale
 
         # Install ngrok after configuration
-        Install-Ngrok -VMName $options.VMName
+        Install-Ngrok
 
         # Show summary
-        Show-DeploymentSummary -VMName $options.VMName -VMIP $vmIP -Config $config
-
-        # Save complete config for future use (merge VM/ngrok options with Headscale config)
-        $fullConfig = $options.Clone()
-
-        # Add Headscale configuration values
-        $fullConfig.HEADSCALE_DOMAIN = $config.HEADSCALE_DOMAIN
-        $fullConfig.AZURE_TENANT_ID = $config.AZURE_TENANT_ID
-        $fullConfig.AZURE_CLIENT_ID = $config.AZURE_CLIENT_ID
-        $fullConfig.AZURE_CLIENT_SECRET = $config.AZURE_CLIENT_SECRET
-        $fullConfig.ALLOWED_EMAIL = $config.ALLOWED_EMAIL
+        Show-DeploymentSummary -VMIP $vmIP
 
         if ([string]::IsNullOrWhiteSpace($ConfigFile)) {
-            $ConfigFile = ".\config-$($options.VMName).json"
+            $ConfigFile = ".\config-$($script:Options.Name).json"
         }
 
-        $fullConfig | ConvertTo-Json | Out-File $ConfigFile
+        $script:Options | ConvertTo-Json | Out-File $ConfigFile
         Write-Host "Configuration saved to: $ConfigFile" -ForegroundColor Green
         Write-Host "  Use -ConfigFile ""$ConfigFile"" to reuse these settings" -ForegroundColor Cyan
 
