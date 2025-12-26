@@ -508,6 +508,43 @@ export ALLOWED_EMAIL='$($script:Options.AzureAllowedEmail)'
     }
 }
 
+function Configure-Ngrok {
+    Write-Host ""
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host "  Authenticating Ngrok" -ForegroundColor Cyan
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host ""
+
+    Write-Host "Applying configuration to VM..." -ForegroundColor Yellow
+
+    # Call the existing headscale-config script with environment variables
+    try {
+        multipass exec $script:Options.Name -- ngrok config add-authtoken $script:Options.NgrokToken
+        Write-Host "✓ Authenticated successfully!" -ForegroundColor Green
+    } catch {
+        Write-Host "✗ Failed to apply configuration: $_" -ForegroundColor Red
+        throw
+    }
+}
+
+function Start-Ngrok {
+    Write-Host ""
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host "  Starting Ngrok Tunnel" -ForegroundColor Cyan
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host ""
+
+    Write-Host "Starting ngrok tunnel inside VM..." -ForegroundColor Yellow
+
+    try {
+        multipass exec $script:Options.Name -- ngrok http --domain=$script:Options.Domain https://localhost:443
+        Write-Host "✓ ngrok tunnel started!" -ForegroundColor Green
+    } catch {
+        Write-Host "✗ Failed to start ngrok tunnel: $_" -ForegroundColor Red
+        throw
+    }
+}
+
 function Install-Ngrok {
     Write-Host ""
     Write-Host "========================================" -ForegroundColor Cyan
@@ -521,12 +558,12 @@ function Install-Ngrok {
     $installScript = @"
 #!/bin/bash
 set -e
-echo 'Downloading ngrok...'
-NGROK_VERSION='v3-stable'
-curl -sSL https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-\`${NGROK_VERSION}-linux-amd64.tgz -o /tmp/ngrok.tgz
-tar -xzf /tmp/ngrok.tgz -C /usr/local/bin
-chmod +x /usr/local/bin/ngrok
-rm /tmp/ngrok.tgz
+curl -sSL https://ngrok-agent.s3.amazonaws.com/ngrok.asc \
+  | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null \
+  && echo "deb https://ngrok-agent.s3.amazonaws.com bookworm main" \
+  | sudo tee /etc/apt/sources.list.d/ngrok.list \
+  && sudo apt update \
+  && sudo apt install ngrok
 echo '✓ ngrok installed: '`$(ngrok version)
 "@
 
@@ -534,42 +571,9 @@ echo '✓ ngrok installed: '`$(ngrok version)
         # Install ngrok binary
         $installScript | multipass exec $($script:Options.Name) -- sudo bash
 
-        # Create start-ngrok-tunnel helper script
-        $tunnelScript = @"
-#!/bin/bash
-# Start ngrok tunnel for Headscale testing
-AUTHTOKEN='$($script:Options.NgrokToken)'
-DOMAIN='$($script:Options.Domain)'
-
-echo '=========================================='
-echo '  Starting ngrok tunnel'
-echo '=========================================='
-echo ''
-
-# Configure authtoken if not already done
-if [ ! -f ~/.ngrok2/ngrok.yml ]; then
-  echo 'Configuring ngrok authtoken...'
-  ngrok config add-authtoken '`$AUTHTOKEN'
-fi
-
-echo 'Tunnel configuration:'
-echo '  Domain: https://'`$DOMAIN
-echo '  Target: https://localhost:443'
-echo ''
-echo 'Starting tunnel... (Press Ctrl+C to stop)'
-echo ''
-
-# Start tunnel with static domain
-ngrok http --domain='`$DOMAIN' https://localhost:443
-"@
-
-        $tunnelScript | multipass exec $script:Options.Name -- sudo bash -c "cat > /usr/local/bin/start-ngrok-tunnel && chmod +x /usr/local/bin/start-ngrok-tunnel"
-
         Write-Host "✓ ngrok installed successfully!" -ForegroundColor Green
-        Write-Host "✓ start-ngrok-tunnel helper created" -ForegroundColor Green
     } catch {
         Write-Host "✗ Failed to install ngrok: $_" -ForegroundColor Red
-        Write-Host "  You can install it manually with the commands above" -ForegroundColor Yellow
     }
 }
 
@@ -619,22 +623,11 @@ function Show-DeploymentSummary {
     Show-URLs
 
     Write-Host "Next Steps:" -ForegroundColor Cyan
-    Write-Host ""
-    Write-Host "1. Start ngrok tunnel (in a separate terminal):" -ForegroundColor Yellow
-    Write-Host "   multipass exec '$($script:Options.Name)' -- start-ngrok-tunnel" -ForegroundColor White
-    Write-Host "   This creates the tunnel: https://$($script:Options.Domain) -> VM:443" -ForegroundColor Cyan
-    Write-Host ""
-    Write-Host "2. Verify Headplane is running:" -ForegroundColor Yellow
-    Write-Host "   multipass exec '$($script:Options.Name)' -- systemctl status headplane" -ForegroundColor White
-    Write-Host ""
-    Write-Host "3. Connect a Tailscale client:" -ForegroundColor Yellow
+    Write-Host "1. Connect a Tailscale client:" -ForegroundColor Yellow
     Write-Host "   tailscale up --login-server https://$($script:Options.Domain)" -ForegroundColor White
     Write-Host ""
-    Write-Host "4. SSH into VM for direct access:" -ForegroundColor Yellow
+    Write-Host "2. SSH into VM for direct access:" -ForegroundColor Yellow
     Write-Host "   multipass shell '$($script:Options.Name)'" -ForegroundColor White
-    Write-Host ""
-    Write-Host "5. View health status:" -ForegroundColor Yellow
-    Write-Host "   multipass exec '$($script:Options.Name)' -- sudo headscale-healthcheck" -ForegroundColor White
     Write-Host ""
 
     Show-TroubleshootingInfo
@@ -677,6 +670,12 @@ See TESTING.md for full documentation.
 
             # Install ngrok after configuration
             Install-Ngrok
+
+            # Authenticate ngrok
+            Configure-Ngrok
+
+            # Start ngrok tunnel
+            Start-Ngrok
         }
 
         # Post-Deployment
