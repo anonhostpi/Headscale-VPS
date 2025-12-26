@@ -36,9 +36,6 @@ $script:Defaults = @{
     CPUs = 2
 }
 
-# Default configuration file
-$DefaultConfigFile = ".\headscale-config-default.json"
-
 # Get merged configuration with proper priority:
 # CLI options (highest) → JSON config (primary fallback) → Hardcoded defaults (secondary fallback)
 function Get-Config {
@@ -521,9 +518,6 @@ See TESTING.md for full documentation.
 
 "@ -ForegroundColor Cyan
 
-        # Determine config file path
-        $configPath = if ($ConfigFile) { $ConfigFile } else { $DefaultConfigFile }
-
         # Define infrastructure required arguments with validation metadata
         $infraRequiredArgs = @{
             Network = @{
@@ -553,7 +547,7 @@ See TESTING.md for full documentation.
             Network = $Network
             NgrokAuthToken = $NgrokAuthToken
             NgrokDomain = $NgrokDomain
-        }) -ConfigFilePath $configPath -RequiredArgs $infraRequiredArgs
+        }) -ConfigFilePath $ConfigFile -RequiredArgs $infraRequiredArgs
 
         # Prerequisites
         Test-Prerequisites
@@ -608,7 +602,7 @@ See TESTING.md for full documentation.
 
         $config = Get-Config `
             -CliOptions @{} `
-            -ConfigFilePath $configPath `
+            -ConfigFilePath $ConfigFile `
             -RequiredArgs $appRequiredArgs `
             -BannerTitle "Configuration" `
             -PrePromptMessage $prePromptMsg `
@@ -643,10 +637,13 @@ See TESTING.md for full documentation.
         $fullConfig.AZURE_CLIENT_SECRET = $config.AZURE_CLIENT_SECRET
         $fullConfig.ALLOWED_EMAIL = $config.ALLOWED_EMAIL
 
-        $configPath = ".\headscale-config-$($options.VMName).json"
-        $fullConfig | ConvertTo-Json | Out-File $configPath
-        Write-Host "Configuration saved to: $configPath" -ForegroundColor Green
-        Write-Host "  Use -ConfigFile ""$configPath"" to reuse these settings" -ForegroundColor Cyan
+        if ([string]::IsNullOrWhiteSpace($ConfigFile)) {
+            $ConfigFile = ".\config-$($options.VMName).json"
+        }
+
+        $fullConfig | ConvertTo-Json | Out-File $ConfigFile
+        Write-Host "Configuration saved to: $ConfigFile" -ForegroundColor Green
+        Write-Host "  Use -ConfigFile ""$ConfigFile"" to reuse these settings" -ForegroundColor Cyan
 
     } catch {
         Write-Host ""
