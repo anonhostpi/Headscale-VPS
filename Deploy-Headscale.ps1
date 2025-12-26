@@ -577,34 +577,27 @@ function Start-Ngrok {
 
     Write-Host "Starting ngrok tunnel in background..." -ForegroundColor Yellow
 
-    # Start ngrok in background using nohup
-    $startScript = @"
-#!/bin/bash
-set -e
-
-# Kill any existing ngrok processes
-pkill ngrok 2>/dev/null || true
-
-# Start ngrok in background with nohup
-nohup ngrok http --domain=$($Options.Domain) https://localhost:443 \
-    > /var/log/ngrok.log 2>&1 &
-
-# Wait a moment for ngrok to start
-sleep 3
-
-# Check if ngrok is running
-if pgrep -x ngrok > /dev/null; then
-    echo "✓ ngrok tunnel started successfully"
-    echo "  PID: `$(pgrep -x ngrok)"
-    echo "  Log: /var/log/ngrok.log"
-else
-    echo "✗ Failed to start ngrok"
-    exit 1
-fi
-"@
+    # Start ngrok in background using nohup - use bash -c to avoid stdin blocking
+    $cmd = (@(
+        "pkill ngrok 2>/dev/null || true"
+        (@(
+            "nohup ngrok http --domain=$($Options.Domain) https://localhost:443 > /var/log/ngrok.log 2>&1"
+            "sleep 3"
+        ) -join " & ")
+        "if pgrep -x ngrok > /dev/null"
+            "then echo '✓ ngrok tunnel started successfully'"
+                (@(
+                    "echo '  PID:'"
+                    "pgrep -x ngrok"
+                ) -join " & ")
+                "echo '  Log: /var/log/ngrok.log'"
+            "else echo '✗ Failed to start ngrok'"
+                "exit 1"
+        "fi"
+    ) -join "; ")
 
     try {
-        $startScript | multipass exec $Options.Name -- sudo bash
+        multipass exec $Options.Name -- sudo bash -c $cmd
         Write-Host "✓ Ngrok tunnel running in background!" -ForegroundColor Green
         Write-Host "  Tunnel: https://$($Options.Domain) → VM:443" -ForegroundColor Cyan
         Write-Host "  View logs: multipass exec '$($Options.Name)' -- tail -f /var/log/ngrok.log" -ForegroundColor White
