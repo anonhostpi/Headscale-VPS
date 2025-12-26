@@ -465,7 +465,7 @@ function Start-MultipassVM {
             --disk $Options.Disk `
             --cpus $Options.CPUs `
             --network $Options.Network `
-            22.04
+            24.04
 
         Write-Host "✓ VM launched successfully!" -ForegroundColor Green
     } catch {
