@@ -179,10 +179,39 @@ $ModuleScope.Required = [ordered]@{
     }
 }
 
+# Optional parameters (email notifications)
+$ModuleScope.Optional = [ordered]@{
+    SmtpSenderEmail = @{
+        Prompt = "SMTP Sender Email (M365 email for notifications)"
+        ValidationType = "Email"
+        IsSecret = $false
+        DefaultValue = ""
+        SummaryLabel = "SMTP Sender"
+    }
+    SmtpRecipientEmail = @{
+        Prompt = "SMTP Recipient Email (where alerts are sent)"
+        ValidationType = "Email"
+        IsSecret = $false
+        DefaultValue = ""
+        SummaryLabel = "SMTP Recipient"
+    }
+    SmtpPassword = @{
+        Prompt = "SMTP App Password (from M365)"
+        ValidationType = "None"
+        IsSecret = $true
+        DefaultValue = ""
+        SummaryLabel = "SMTP Password"
+    }
+}
+
 $ModuleScope.Defaults = [ordered]@{}
 
 foreach ($key in $ModuleScope.Required.Keys) {
     $ModuleScope.Defaults[$key] = $ModuleScope.Required[$key].DefaultValue
+}
+
+foreach ($key in $ModuleScope.Optional.Keys) {
+    $ModuleScope.Defaults[$key] = $ModuleScope.Optional[$key].DefaultValue
 }
 
 function Get-ConfigValue {
@@ -571,6 +600,64 @@ function Configure-Caddy-ForTesting {
     }
 }
 
+function Configure-Msmtp {
+    param(
+        [hashtable]$Options = $ModuleScope.Options
+    )
+
+    # Skip if SMTP not configured
+    if ([string]::IsNullOrWhiteSpace($Options.SmtpSenderEmail) -or
+        [string]::IsNullOrWhiteSpace($Options.SmtpPassword)) {
+        Write-Host ""
+        Write-Host "========================================" -ForegroundColor Cyan
+        Write-Host "  Email Notifications" -ForegroundColor Cyan
+        Write-Host "========================================" -ForegroundColor Cyan
+        Write-Host ""
+        Write-Host "⊘ Skipped - SMTP not configured" -ForegroundColor DarkGray
+        Write-Host "  To enable: Add SmtpSenderEmail, SmtpRecipientEmail, SmtpPassword to config" -ForegroundColor DarkGray
+        return
+    }
+
+    Write-Host ""
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host "  Configuring Email Notifications" -ForegroundColor Cyan
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host ""
+
+    Write-Host "Setting up msmtp for M365..." -ForegroundColor Yellow
+
+    # Use sender as recipient if not specified
+    $recipient = $Options.SmtpRecipientEmail
+    if ([string]::IsNullOrWhiteSpace($recipient)) {
+        $recipient = $Options.SmtpSenderEmail
+    }
+
+    # Configure msmtp directly (avoiding interactive prompts)
+    $cmd = (@(
+        "echo -n '$($Options.SmtpPassword)' > /etc/msmtp-password"
+        "chmod 600 /etc/msmtp-password"
+        "sed -i 's|^from.*|from           $($Options.SmtpSenderEmail)|' /etc/msmtprc"
+        "sed -i 's|^user.*|user           $($Options.SmtpSenderEmail)|' /etc/msmtprc"
+        "chmod 600 /etc/msmtprc"
+        "cat > /etc/aliases << 'ALIASES_EOF'
+root: $recipient
+headscale: $recipient
+default: $recipient
+ALIASES_EOF"
+        "echo 'msmtp configured for $($Options.SmtpSenderEmail) -> $recipient'"
+    ) -join " && ")
+
+    try {
+        multipass exec $Options.Name -- sudo bash -c $cmd
+        Write-Host "✓ Email notifications configured!" -ForegroundColor Green
+        Write-Host "  Sender: $($Options.SmtpSenderEmail)" -ForegroundColor DarkGray
+        Write-Host "  Recipient: $recipient" -ForegroundColor DarkGray
+    } catch {
+        Write-Host "✗ Failed to configure msmtp: $_" -ForegroundColor Red
+        Write-Host "  Email notifications will not work" -ForegroundColor Yellow
+    }
+}
+
 function Configure-Ngrok {
     param(
         [hashtable]$Options = $ModuleScope.Options
@@ -793,6 +880,9 @@ See TESTING.md for full documentation.
 
             # Configure Caddy for testing (prevents ACME attempts behind ngrok)
             Configure-Caddy-ForTesting
+
+            # Configure email notifications (optional)
+            Configure-Msmtp
 
             # Install ngrok after configuration
             Install-Ngrok
