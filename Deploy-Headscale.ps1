@@ -188,6 +188,13 @@ $ModuleScope.Optional = [ordered]@{
         DefaultValue = ""
         SummaryLabel = "SMTP Sender"
     }
+    SmtpFromEmail = @{
+        Prompt = "SMTP From Email (optional - for Send As, leave blank to use sender)"
+        ValidationType = "Email"
+        IsSecret = $false
+        DefaultValue = ""
+        SummaryLabel = "SMTP From"
+    }
     SmtpRecipientEmail = @{
         Prompt = "SMTP Recipient Email (where alerts are sent)"
         ValidationType = "Email"
@@ -632,25 +639,28 @@ function Configure-Msmtp {
         $recipient = $Options.SmtpSenderEmail
     }
 
+    # Use SmtpFromEmail if provided, otherwise use SmtpSenderEmail for From header
+    $fromEmail = $Options.SmtpFromEmail
+    if ([string]::IsNullOrWhiteSpace($fromEmail)) {
+        $fromEmail = $Options.SmtpSenderEmail
+    }
+
     # Configure msmtp directly (avoiding interactive prompts)
     $cmd = (@(
         "echo -n '$($Options.SmtpPassword)' > /etc/msmtp-password"
         "chmod 600 /etc/msmtp-password"
-        "sed -i 's|^from.*|from           $($Options.SmtpSenderEmail)|' /etc/msmtprc"
+        "sed -i 's|^from.*|from           $fromEmail|' /etc/msmtprc"
         "sed -i 's|^user.*|user           $($Options.SmtpSenderEmail)|' /etc/msmtprc"
         "chmod 600 /etc/msmtprc"
-        "cat > /etc/aliases << 'ALIASES_EOF'
-root: $recipient
-headscale: $recipient
-default: $recipient
-ALIASES_EOF"
-        "echo 'msmtp configured for $($Options.SmtpSenderEmail) -> $recipient'"
+        "printf 'root: %s\nheadscale: %s\ndefault: %s\n' '$recipient' '$recipient' '$recipient' > /etc/aliases"
+        "echo 'msmtp configured: auth=$($Options.SmtpSenderEmail) from=$fromEmail to=$recipient'"
     ) -join " && ")
 
     try {
         multipass exec $Options.Name -- sudo bash -c $cmd
         Write-Host "✓ Email notifications configured!" -ForegroundColor Green
-        Write-Host "  Sender: $($Options.SmtpSenderEmail)" -ForegroundColor DarkGray
+        Write-Host "  Auth (user): $($Options.SmtpSenderEmail)" -ForegroundColor DarkGray
+        Write-Host "  From: $fromEmail" -ForegroundColor DarkGray
         Write-Host "  Recipient: $recipient" -ForegroundColor DarkGray
     } catch {
         Write-Host "✗ Failed to configure msmtp: $_" -ForegroundColor Red
@@ -845,7 +855,10 @@ function Show-DeploymentSummary {
 #region Main
 
 function Main {
-    $vmCreated = $false
+    $vm = @{
+        created = $false
+        ip = $null
+    }
 
     try {
         # Show banner
@@ -862,15 +875,13 @@ See TESTING.md for full documentation.
         Test-Prerequisites
 
         # Spin up VM and get IP
-        $ip = & {
+        & {
             # Launch VM with base cloud-init
-            $ip = Start-MultipassVM
-            $vmCreated = $true
+            $vm.ip = Start-MultipassVM
+            $vm.created = $true
 
             # Monitor deployment (waits for cloud-init)
             Watch-Deployment
-
-            return $ip
         }
 
         # Deployment setup
@@ -897,7 +908,7 @@ See TESTING.md for full documentation.
         # Post-Deployment
         & {
             # Show summary
-            Show-DeploymentSummary -VMIP $ip
+            Show-DeploymentSummary -VMIP $vm.ip
 
             # Save config for future reuse
             Save-Config
@@ -915,7 +926,7 @@ See TESTING.md for full documentation.
         Write-Host ""
 
         # Offer cleanup if VM was created
-        if ($vmCreated) {
+        if ($vm.created) {
             Write-Host "Cleanup Options:" -ForegroundColor Yellow
             $cleanup = Read-Host "Delete failed VM '$($ModuleScope.Options.Name)'? [y/N]"
             if ($cleanup -eq 'y' -or $cleanup -eq 'Y') {
