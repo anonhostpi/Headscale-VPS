@@ -41,315 +41,82 @@ packages:
   - apt-listchanges      # Used: Email notifications for package changes
 
 write_files:
-  # =========================================================================
-  # Version Configuration (MUST BE FIRST - other scripts depend on this)
-  # =========================================================================
-  - path: /etc/headscale/versions.conf
+  - path: /opt/write_files.yaml
     permissions: "0644"
     content: |
-      # Populated during setup:
-      # $(git rev-parse --show-toplevel)/write_files/etc/headscale/versions.conf
-
-  # =========================================================================
-  # Constants Configuration (centralized timeouts and thresholds)
-  # =========================================================================
-  - path: /etc/headscale/constants.conf
-    permissions: "0644"
-    content: |
-      # Populated during setup:
-      # $(git rev-parse --show-toplevel)/write_files/etc/headscale/constants.conf
-
-  # =========================================================================
-  # APT Preferences (package pinning for stability)
-  # =========================================================================
-  - path: /etc/apt/preferences.d/headscale-pinning
-    permissions: "0644"
-    content: |
-      # Populated during setup:
-      # $(git rev-parse --show-toplevel)/write_files/etc/apt/preferences.d/headscale-pinning
-
-  # =========================================================================
-  # Shared Libraries (eliminate code duplication)
-  # =========================================================================
-  - path: /usr/local/lib/headscale-common.sh
-    permissions: "0644"
-    content: |
-      # Populated during setup:
-      # $(git rev-parse --show-toplevel)/write_files/usr/local/lib/headscale-common.sh
-
-  - path: /usr/local/lib/headscale-validators.sh
-    permissions: "0644"
-    content: |
-      # Populated during setup:
-      # $(git rev-parse --show-toplevel)/write_files/usr/local/lib/headscale-validators.sh
-
-  # =========================================================================
-  # Secrets Management Library (eliminates code duplication)
-  # =========================================================================
-  - path: /usr/local/lib/headscale-secrets.sh
-    permissions: "0644"
-    content: |
-      # Populated during setup:
-      # $(git rev-parse --show-toplevel)/write_files/usr/local/lib/headscale-secrets.sh
-
-  # =========================================================================
-  # SSH Hardening Configuration
-  # =========================================================================
-  - path: /etc/ssh/sshd_config.d/99-hardening.conf
-    permissions: "0644"
-    content: |
-      # Populated during setup:
-      # $(git rev-parse --show-toplevel)/write_files/etc/ssh/sshd_config.d/99-hardening.conf
-
-  # =========================================================================
-  # Kernel Hardening (sysctl)
-  # =========================================================================
-  - path: /etc/sysctl.d/99-security.conf
-    permissions: "0644"
-    content: |
-      # Populated during setup:
-      # $(git rev-parse --show-toplevel)/write_files/etc/sysctl.d/99-security.conf
-
-  # =========================================================================
-  # Configuration Script (placed on PATH, no .sh extension)
-  # =========================================================================
-  - path: /usr/local/bin/headscale-config
-    permissions: "0755"
-    content: |
-      # Populated during setup:
-      # $(git rev-parse --show-toplevel)/write_files/usr/local/bin/headscale-config
-
-  # =========================================================================
-  # Template: Headscale Configuration
-  # =========================================================================
-  - path: /etc/headscale/templates/headscale.yaml.tpl
-    permissions: "0644"
-    content: |
-      # Populated during setup:
-      # $(git rev-parse --show-toplevel)/write_files/etc/headscale/templates/headscale.yaml.tpl
-
-  # =========================================================================
-  # Template: Headplane Configuration
-  # =========================================================================
-  - path: /etc/headscale/templates/headplane.yaml.tpl
-    permissions: "0644"
-    content: |
-      # Populated during setup:
-      # $(git rev-parse --show-toplevel)/write_files/etc/headscale/templates/headplane.yaml.tpl
-
-  # =========================================================================
-  # Template: Caddyfile
-  # =========================================================================
-  - path: /etc/headscale/templates/Caddyfile.tpl
-    permissions: "0644"
-    content: |
-      # Populated during setup:
-      # $(git rev-parse --show-toplevel)/write_files/etc/headscale/templates/Caddyfile.tpl
-
-  # =========================================================================
-  # Headscale Systemd Service (Hardened)
-  # =========================================================================
-  - path: /etc/systemd/system/headscale.service
-    permissions: "0644"
-    content: |
-      # Populated during setup:
-      # $(git rev-parse --show-toplevel)/write_files/etc/systemd/system/headscale.service
-
-  # =========================================================================
-  # Headplane Systemd Service (Hardened)
-  # =========================================================================
-  - path: /etc/systemd/system/headplane.service
-    permissions: "0644"
-    content: |
-      # Populated during setup:
-      # $(git rev-parse --show-toplevel)/write_files/etc/systemd/system/headplane.service
-
-  # =========================================================================
-  # Headplane Install Script (separate from cloud-init for flexibility)
-  # =========================================================================
-  - path: /opt/install-headplane.sh
-    permissions: "0755"
-    content: |
-      # Populated during setup:
-      # $(git rev-parse --show-toplevel)/write_files/opt/install-headplane.sh
-
-  # =========================================================================
-  # API Key Rotation Script (automates key renewal before expiration)
-  # =========================================================================
-  - path: /usr/local/bin/headscale-rotate-apikey
-    permissions: "0755"
-    content: |
-      # Populated during setup:
-      # $(git rev-parse --show-toplevel)/write_files/usr/local/bin/headscale-rotate-apikey
-
-  # =========================================================================
-  # Cron job for automatic API key rotation (runs weekly, rotates if < 14 days left)
-  # =========================================================================
-  - path: /etc/cron.weekly/headscale-apikey-check
-    permissions: "0755"
-    content: |
-      # Populated during setup:
-      # $(git rev-parse --show-toplevel)/write_files/etc/cron.weekly/headscale-apikey-check
-
-  # =========================================================================
-  # Secrets Migration Script (migrates plaintext secrets to systemd-creds)
-  # =========================================================================
-  - path: /usr/local/bin/headscale-migrate-secrets
-    permissions: "0755"
-    content: |
-      # Populated during setup:
-      # $(git rev-parse --show-toplevel)/write_files/usr/local/bin/headscale-migrate-secrets
-
-  # =========================================================================
-  # Health Check Script (monitors system health)
-  # =========================================================================
-  - path: /usr/local/bin/headscale-healthcheck
-    permissions: "0755"
-    content: |
-      # Populated during setup:
-      # $(git rev-parse --show-toplevel)/write_files/usr/local/bin/headscale-healthcheck
-
-  # =========================================================================
-  # Health Check Systemd Service
-  # =========================================================================
-  - path: /etc/systemd/system/headscale-healthcheck.service
-    permissions: "0644"
-    content: |
-      # Populated during setup:
-      # $(git rev-parse --show-toplevel)/write_files/etc/systemd/system/headscale-healthcheck.service
-
-  # =========================================================================
-  # Health Check Systemd Timer (runs every 5 minutes)
-  # =========================================================================
-  - path: /etc/systemd/system/headscale-healthcheck.timer
-    permissions: "0644"
-    content: |
-      # Populated during setup:
-      # $(git rev-parse --show-toplevel)/write_files/etc/systemd/system/headscale-healthcheck.timer
-
-  # =========================================================================
-  # Logrotate Configuration (prevents log files from growing indefinitely)
-  # =========================================================================
-  - path: /etc/logrotate.d/headscale
-    permissions: "0644"
-    content: |
-      # Populated during setup:
-      # $(git rev-parse --show-toplevel)/write_files/etc/logrotate.d/headscale
-
-  # =========================================================================
-  # msmtp Configuration (SMTP relay via M365 App Password)
-  # =========================================================================
-  - path: /etc/msmtprc
-    permissions: "0600"
-    content: |
-      # Populated during setup:
-      # $(git rev-parse --show-toplevel)/write_files/etc/msmtprc
-
-  # =========================================================================
-  # msmtp Configuration Script
-  # =========================================================================
-  - path: /usr/local/bin/msmtp-config
-    permissions: "0755"
-    content: |
-      # Populated during setup:
-      # $(git rev-parse --show-toplevel)/write_files/usr/local/bin/msmtp-config
-
-  # =========================================================================
-  # Unattended Upgrades Configuration
-  # =========================================================================
-  - path: /etc/apt/apt.conf.d/50unattended-upgrades
-    permissions: "0644"
-    content: |
-      // Populated during setup:
-      // $(git rev-parse --show-toplevel)/write_files/etc/apt/apt.conf.d/50unattended-upgrades
-
-  - path: /etc/apt/apt.conf.d/20auto-upgrades
-    permissions: "0644"
-    content: |
-      // Populated during setup:
-      // $(git rev-parse --show-toplevel)/write_files/etc/apt/apt.conf.d/20auto-upgrades
-
-  # =========================================================================
-  # Headscale/Headplane Update Script (GitHub Releases)
-  # =========================================================================
-  - path: /usr/local/bin/headscale-update
-    permissions: "0755"
-    content: |
-      # Populated during setup:
-      # $(git rev-parse --show-toplevel)/write_files/usr/local/bin/headscale-update
-
-  # =========================================================================
-  # Fail2ban Email Action (using msmtp)
-  # =========================================================================
-  - path: /etc/fail2ban/action.d/msmtp-mail.conf
-    permissions: "0644"
-    content: |
-      # Populated during setup:
-      # $(git rev-parse --show-toplevel)/write_files/etc/fail2ban/action.d/msmtp-mail.conf
-
-  # =========================================================================
-  # Fail2ban Configuration (static - no templating needed)
-  # =========================================================================
-  
-  # SSH jail
-  - path: /etc/fail2ban/jail.d/sshd.conf
-    permissions: "0644"
-    content: |
-      # Populated during setup:
-      # $(git rev-parse --show-toplevel)/write_files/etc/fail2ban/jail.d/sshd.conf
-
-  # Caddy OIDC filter
-  - path: /etc/fail2ban/filter.d/caddy-oidc.conf
-    permissions: "0644"
-    content: |
-      # Populated during setup:
-      # $(git rev-parse --show-toplevel)/write_files/etc/fail2ban/filter.d/caddy-oidc.conf
-
-  # Caddy OIDC jail
-  - path: /etc/fail2ban/jail.d/caddy-oidc.conf
-    permissions: "0644"
-    content: |
-      # Populated during setup:
-      # $(git rev-parse --show-toplevel)/write_files/etc/fail2ban/jail.d/caddy-oidc.conf
-
-  # Headscale auth key filter
-  - path: /etc/fail2ban/filter.d/headscale-authkey.conf
-    permissions: "0644"
-    content: |
-      # Populated during setup:
-      # $(git rev-parse --show-toplevel)/write_files/etc/fail2ban/filter.d/headscale-authkey.conf
-
-  # Headscale auth key jail
-  - path: /etc/fail2ban/jail.d/headscale.conf
-    permissions: "0644"
-    content: |
-      # Populated during setup:
-      # $(git rev-parse --show-toplevel)/write_files/etc/fail2ban/jail.d/headscale.conf
-
-  # Recidive jail - longer bans for repeat offenders
-  - path: /etc/fail2ban/jail.d/recidive.conf
-    permissions: "0644"
-    content: |
-      # Populated during setup:
-      # $(git rev-parse --show-toplevel)/write_files/etc/fail2ban
-
-  # =========================================================================
-  # Auditd Rules (config and secret monitoring)
-  # =========================================================================
-  - path: /etc/audit/rules.d/headscale.rules
-    permissions: "0644"
-    content: |
-      # Populated during setup:
-      # $(git rev-parse --show-toplevel)/write_files/etc/audit/rules.d/headscale.rules
-
-  # =========================================================================
-  # Setup Script (runs once during cloud-init)
-  # =========================================================================
-  - path: /opt/setup-headscale.sh
-    permissions: "0755"
-    content: |
-      # Populated during setup:
-      # $(git rev-parse --show-toplevel)/write_files/opt/setup-headscale.sh
+      # This file maps each installation file to its permissions.
+      - path: /etc/headscale/versions.conf
+        permissions: "0644"
+      - path: /etc/headscale/constants.conf
+        permissions: "0644"
+      - path: /etc/apt/preferences.d/headscale-pinning
+        permissions: "0644"
+      - path: /usr/local/lib/headscale-common.sh
+        permissions: "0644"
+      - path: /usr/local/lib/headscale-validators.sh
+        permissions: "0644"
+      - path: /usr/local/lib/headscale-secrets.sh
+        permissions: "0644"
+      - path: /etc/ssh/sshd_config.d/99-hardening.conf
+        permissions: "0644"
+      - path: /etc/sysctl.d/99-security.conf
+        permissions: "0644"
+      - path: /usr/local/bin/headscale-config
+        permissions: "0755"
+      - path: /etc/headscale/templates/headscale.yaml.tpl
+        permissions: "0644"
+      - path: /etc/headscale/templates/headplane.yaml.tpl
+        permissions: "0644"
+      - path: /etc/headscale/templates/Caddyfile.tpl
+        permissions: "0644"
+      - path: /etc/systemd/system/headscale.service
+        permissions: "0644"
+      - path: /etc/systemd/system/headplane.service
+        permissions: "0644"
+      - path: /opt/install-headplane.sh
+        permissions: "0755"
+      - path: /usr/local/bin/headscale-rotate-apikey
+        permissions: "0755"
+      - path: /etc/cron.weekly/headscale-apikey-check
+        permissions: "0755"
+      - path: /usr/local/bin/headscale-migrate-secrets
+        permissions: "0755"
+      - path: /usr/local/bin/headscale-healthcheck
+        permissions: "0755"
+      - path: /etc/systemd/system/headscale-healthcheck.service
+        permissions: "0644"
+      - path: /etc/systemd/system/headscale-healthcheck.timer
+        permissions: "0644"
+      - path: /etc/logrotate.d/headscale
+        permissions: "0644"
+      - path: /etc/msmtprc
+        permissions: "0600"
+      - path: /usr/local/bin/msmtp-config
+        permissions: "0755"
+      - path: /etc/apt/apt.conf.d/50unattended-upgrades
+        permissions: "0644"
+      - path: /etc/apt/apt.conf.d/20auto-upgrades
+        permissions: "0644"
+      - path: /usr/local/bin/headscale-update
+        permissions: "0755"
+      - path: /etc/fail2ban/action.d/msmtp-mail.conf
+        permissions: "0644"
+      - path: /etc/fail2ban/jail.d/sshd.conf
+        permissions: "0644"
+      - path: /etc/fail2ban/filter.d/caddy-oidc.conf
+        permissions: "0644"
+      - path: /etc/fail2ban/jail.d/caddy-oidc.conf
+        permissions: "0644"
+      - path: /etc/fail2ban/filter.d/headscale-authkey.conf
+        permissions: "0644"
+      - path: /etc/fail2ban/jail.d/headscale.conf
+        permissions: "0644"
+      - path: /etc/fail2ban/jail.d/recidive.conf
+        permissions: "0644"
+      - path: /etc/audit/rules.d/headscale.rules
+        permissions: "0644"
+      - path: /opt/setup-headscale.sh
+        permissions: "0755"
 
 runcmd:
   - /opt/setup-headscale.sh
