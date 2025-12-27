@@ -2,6 +2,53 @@
 # Headscale + Headplane VPS - Production Deployment
 # Full documentation: https://github.com/anonhostpi/Headscale-VPS/blob/main/README.md
 
+bootcmd:
+  - |
+    set -e
+    REPO_URL="https://github.com/anonhostpi/Headscale-VPS"
+    REPO_DIR="/tmp/headscale-vps-repo"
+
+    echo "Downloading Headscale-VPS repository..."
+
+    if command -v git >/dev/null 2>&1; then
+      git clone --depth 1 "$REPO_URL" "$REPO_DIR"
+    else
+      mkdir -p "$REPO_DIR"
+      curl -fsSL "${REPO_URL}/archive/refs/heads/main.tar.gz" | tar -xz -C "$REPO_DIR" --strip-components=1
+    fi
+
+    cd "$REPO_DIR"
+
+    if [ ! -f write_files.yaml ]; then
+      echo "ERROR: write_files.yaml not found"
+      exit 1
+    fi
+
+    echo "Installing configuration files..."
+
+    while IFS= read -r line; do
+      if echo "$line" | grep -q "^  - path:"; then
+        current_path=$(echo "$line" | sed 's/.*path: //' | tr -d '"')
+      elif echo "$line" | grep -q "^    permissions:"; then
+        current_perms=$(echo "$line" | sed 's/.*permissions: //' | tr -d '"')
+
+        source_file="write_files${current_path}"
+
+        if [ -f "$source_file" ]; then
+          target_dir=$(dirname "$current_path")
+          mkdir -p "$target_dir"
+          cp "$source_file" "$current_path"
+          chmod "$current_perms" "$current_path"
+          echo "  ✓ $current_path ($current_perms)"
+        else
+          echo "  ✗ Not found: $source_file"
+        fi
+      fi
+    done < write_files.yaml
+
+    rm -rf "$REPO_DIR"
+    echo "✓ Configuration files installed"
+
 package_update: true
 package_upgrade: false  # Disabled to prevent uncontrolled updates - use controlled update script instead
 
@@ -39,84 +86,6 @@ packages:
   # Automatic updates
   - unattended-upgrades  # Used: Automatic security updates
   - apt-listchanges      # Used: Email notifications for package changes
-
-write_files:
-  - path: /opt/write_files.yaml
-    permissions: "0644"
-    content: |
-      # This file maps each installation file to its permissions.
-      - path: /etc/headscale/versions.conf
-        permissions: "0644"
-      - path: /etc/headscale/constants.conf
-        permissions: "0644"
-      - path: /etc/apt/preferences.d/headscale-pinning
-        permissions: "0644"
-      - path: /usr/local/lib/headscale-common.sh
-        permissions: "0644"
-      - path: /usr/local/lib/headscale-validators.sh
-        permissions: "0644"
-      - path: /usr/local/lib/headscale-secrets.sh
-        permissions: "0644"
-      - path: /etc/ssh/sshd_config.d/99-hardening.conf
-        permissions: "0644"
-      - path: /etc/sysctl.d/99-security.conf
-        permissions: "0644"
-      - path: /usr/local/bin/headscale-config
-        permissions: "0755"
-      - path: /etc/headscale/templates/headscale.yaml.tpl
-        permissions: "0644"
-      - path: /etc/headscale/templates/headplane.yaml.tpl
-        permissions: "0644"
-      - path: /etc/headscale/templates/Caddyfile.tpl
-        permissions: "0644"
-      - path: /etc/systemd/system/headscale.service
-        permissions: "0644"
-      - path: /etc/systemd/system/headplane.service
-        permissions: "0644"
-      - path: /opt/install-headplane.sh
-        permissions: "0755"
-      - path: /usr/local/bin/headscale-rotate-apikey
-        permissions: "0755"
-      - path: /etc/cron.weekly/headscale-apikey-check
-        permissions: "0755"
-      - path: /usr/local/bin/headscale-migrate-secrets
-        permissions: "0755"
-      - path: /usr/local/bin/headscale-healthcheck
-        permissions: "0755"
-      - path: /etc/systemd/system/headscale-healthcheck.service
-        permissions: "0644"
-      - path: /etc/systemd/system/headscale-healthcheck.timer
-        permissions: "0644"
-      - path: /etc/logrotate.d/headscale
-        permissions: "0644"
-      - path: /etc/msmtprc
-        permissions: "0600"
-      - path: /usr/local/bin/msmtp-config
-        permissions: "0755"
-      - path: /etc/apt/apt.conf.d/50unattended-upgrades
-        permissions: "0644"
-      - path: /etc/apt/apt.conf.d/20auto-upgrades
-        permissions: "0644"
-      - path: /usr/local/bin/headscale-update
-        permissions: "0755"
-      - path: /etc/fail2ban/action.d/msmtp-mail.conf
-        permissions: "0644"
-      - path: /etc/fail2ban/jail.d/sshd.conf
-        permissions: "0644"
-      - path: /etc/fail2ban/filter.d/caddy-oidc.conf
-        permissions: "0644"
-      - path: /etc/fail2ban/jail.d/caddy-oidc.conf
-        permissions: "0644"
-      - path: /etc/fail2ban/filter.d/headscale-authkey.conf
-        permissions: "0644"
-      - path: /etc/fail2ban/jail.d/headscale.conf
-        permissions: "0644"
-      - path: /etc/fail2ban/jail.d/recidive.conf
-        permissions: "0644"
-      - path: /etc/audit/rules.d/headscale.rules
-        permissions: "0644"
-      - path: /opt/setup-headscale.sh
-        permissions: "0755"
 
 runcmd:
   - /opt/setup-headscale.sh
