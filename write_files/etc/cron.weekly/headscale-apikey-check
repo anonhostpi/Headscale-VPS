@@ -1,0 +1,21 @@
+#!/bin/bash
+# Check if API key expires in less than 14 days and rotate if needed
+
+API_KEY_EXPIRES="/var/lib/headscale/api_key_expires"
+LOGFILE="/var/log/headscale/apikey-rotation.log"
+
+if [ ! -f "$API_KEY_EXPIRES" ]; then
+  echo "$(date): No expiration file found, skipping" >> "$LOGFILE"
+  exit 0
+fi
+
+EXPIRES=$(cat "$API_KEY_EXPIRES")
+TODAY=$(date +%Y-%m-%d)
+DAYS_LEFT=$(( ($(date -d "$EXPIRES" +%s) - $(date -d "$TODAY" +%s)) / 86400 ))
+
+if [ $DAYS_LEFT -lt 14 ]; then
+  echo "$(date): API key expires in $DAYS_LEFT days, rotating..." >> "$LOGFILE"
+  /usr/local/bin/headscale-rotate-apikey >> "$LOGFILE" 2>&1
+else
+  echo "$(date): API key valid for $DAYS_LEFT more days" >> "$LOGFILE"
+fi

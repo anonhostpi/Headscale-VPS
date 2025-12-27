@@ -1,0 +1,48 @@
+[Unit]
+Description=Headscale - Tailscale control server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=headscale
+Group=headscale
+
+# Load encrypted credentials (automatically decrypted by systemd)
+# Falls back to plaintext files if encrypted credentials don't exist
+LoadCredentialEncrypted=oidc_client_secret:/etc/credstore.encrypted/oidc_client_secret.cred
+LoadCredential=oidc_client_secret:/var/lib/headscale/oidc_client_secret
+
+ExecStart=/usr/local/bin/headscale serve
+Restart=always
+RestartSec=5
+RuntimeDirectory=headscale
+RuntimeDirectoryMode=0755
+
+# Logging - Headscale outputs to stderr, redirect to file for fail2ban
+StandardOutput=append:/var/log/headscale/headscale.log
+StandardError=append:/var/log/headscale/headscale.log
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/headscale /var/log/headscale
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictRealtime=true
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+SystemCallFilter=@system-service
+SystemCallArchitectures=native
+PrivateDevices=true
+ProtectClock=true
+ProtectHostname=true
+
+[Install]
+WantedBy=multi-user.target

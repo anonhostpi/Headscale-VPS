@@ -47,31 +47,8 @@ write_files:
   - path: /etc/headscale/versions.conf
     permissions: "0644"
     content: |
-      # Headscale VPS Version Configuration
-      # Pinned to specific versions for security and reproducibility
-      # Update these values carefully and test before deploying to production
-
-      # NVM (Node Version Manager)
-      # Version from: https://github.com/nvm-sh/nvm/releases
-      NVM_VERSION="v0.40.1"
-      NVM_SHA256="abdb525ee9f5b48b34d8ed9fc67c6013fb0f659712e401ecd88ab989b3af8f53"
-
-      # Node.js version for Headplane (via nvm)
-      # v25.2.1+ has stable node:sqlite support (no --experimental-sqlite flag needed)
-      # Format: Major.Minor.Patch (e.g., "25.2.1")
-      NODE_VERSION="25.2.1"
-
-      # Node.js SHA256 checksum (for linux-x64)
-      # Verify at: https://nodejs.org/dist/v${NODE_VERSION}/SHASUMS256.txt
-      NODE_SHA256="b9f6a97e81c89a9df45526b4f86dafdccaf12b82295f7bf35bdb2b0f5e68744f"
-
-      # Headplane version (git tag from https://github.com/tale/headplane/tags)
-      # Format: "vX.Y.Z" (e.g., "v0.6.1") or "main" for latest
-      HEADPLANE_VERSION="v0.6.1"
-
-      # Headscale version (from https://github.com/juanfont/headscale/releases)
-      # Format: "X.Y.Z" without 'v' prefix (e.g., "0.27.1") or empty for latest
-      HEADSCALE_VERSION="0.27.1"
+      # Populated during setup:
+      # $(git rev-parse --show-toplevel)/write_files/etc/headscale/versions.conf
 
   # =========================================================================
   # Constants Configuration (centralized timeouts and thresholds)
@@ -79,46 +56,8 @@ write_files:
   - path: /etc/headscale/constants.conf
     permissions: "0644"
     content: |
-      # Headscale VPS Constants Configuration
-      # Centralized timeouts, thresholds, and magic numbers
-      # Update these values carefully and test before deploying to production
-
-      # API Key Management
-      readonly API_KEY_EXPIRATION_DAYS=90
-      readonly API_KEY_WARNING_THRESHOLD_DAYS=14
-
-      # Systemd
-      readonly SYSTEMD_MIN_VERSION=250
-
-      # Service Startup
-      readonly SERVICE_START_RETRY_COUNT=30
-      readonly SERVICE_START_RETRY_DELAY=1  # seconds
-
-      # Health Check Thresholds
-      readonly CERT_EXPIRY_WARNING_DAYS=14
-      readonly DISK_WARNING_THRESHOLD_PCT=80
-
-      # Fail2ban Configuration
-      readonly FAIL2BAN_SSH_MAXRETRY=4
-      readonly FAIL2BAN_SSH_FINDTIME="10m"
-      readonly FAIL2BAN_SSH_BANTIME="24h"
-
-      readonly FAIL2BAN_OIDC_MAXRETRY=5
-      readonly FAIL2BAN_OIDC_FINDTIME="10m"
-      readonly FAIL2BAN_OIDC_BANTIME="12h"
-
-      readonly FAIL2BAN_AUTHKEY_MAXRETRY=5
-      readonly FAIL2BAN_AUTHKEY_FINDTIME="10m"
-      readonly FAIL2BAN_AUTHKEY_BANTIME="12h"
-
-      readonly FAIL2BAN_RECIDIVE_MAXRETRY=3
-      readonly FAIL2BAN_RECIDIVE_FINDTIME="1d"
-      readonly FAIL2BAN_RECIDIVE_BANTIME="1w"
-
-      # Logging
-      readonly LOG_ROTATION_DAYS=7
-      readonly CADDY_LOG_SIZE="10mb"
-      readonly CADDY_LOG_KEEP=5
+      # Populated during setup:
+      # $(git rev-parse --show-toplevel)/write_files/etc/headscale/constants.conf
 
   # =========================================================================
   # APT Preferences (package pinning for stability)
@@ -126,26 +65,8 @@ write_files:
   - path: /etc/apt/preferences.d/headscale-pinning
     permissions: "0644"
     content: |
-      # APT pinning for Headscale VPS dependencies
-      # Prevents automatic upgrades of critical packages
-      # Pin priority explanation:
-      #   990 = prefer this version over others
-      #   500 = normal priority
-      #   100 = downgrade priority
-      #  -1   = never install this version
-
-      # Pin Caddy to current installed version
-      # To upgrade: change Pin to new version or remove this file
-      Package: caddy
-      Pin: version *
-      Pin-Priority: 990
-
-      # Explanation: This pins Caddy to the currently installed version
-      # Caddy will not be automatically upgraded by unattended-upgrades
-      # To upgrade Caddy:
-      #   1. Update this file with new version or remove it
-      #   2. Run: apt-get install caddy
-      #   3. Test thoroughly before re-adding pin
+      # Populated during setup:
+      # $(git rev-parse --show-toplevel)/write_files/etc/apt/preferences.d/headscale-pinning
 
   # =========================================================================
   # Shared Libraries (eliminate code duplication)
@@ -153,63 +74,14 @@ write_files:
   - path: /usr/local/lib/headscale-common.sh
     permissions: "0644"
     content: |
-      #!/bin/bash
-      # common.sh - Shared utilities for Headscale VPS scripts
-      # Provides color definitions, logging functions, and banners
-
-      # Color definitions (used across multiple scripts)
-      RED='\033[0;31m'
-      GREEN='\033[0;32m'
-      YELLOW='\033[1;33m'
-      NC='\033[0m' # No Color
-
-      # Logging functions
-      print_success() { echo -e "${GREEN}[OK]${NC} $1"; }
-      print_warning() { echo -e "${YELLOW}[!!]${NC} $1"; }
-      print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
-      print_info() { echo -e "${NC}[INFO]${NC} $1"; }
-
-      # Banner printing
-      print_banner() {
-        local title="$1"
-        echo ""
-        echo "=========================================="
-        echo "  $title"
-        echo "=========================================="
-        echo ""
-      }
+      # Populated during setup:
+      # $(git rev-parse --show-toplevel)/write_files/usr/local/lib/headscale-common.sh
 
   - path: /usr/local/lib/headscale-validators.sh
     permissions: "0644"
     content: |
-      #!/bin/bash
-      # validators.sh - Input validation functions for Headscale VPS
-
-      # Validate domain name format
-      validate_domain() {
-        local domain="$1"
-        [[ "$domain" =~ ^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$ ]]
-      }
-
-      # Validate email address format
-      # RFC 5322 compliant (simplified) - validates local@domain.tld format
-      validate_email() {
-        local email="$1"
-        # Pattern breakdown:
-        # ^[a-zA-Z0-9._%+-]+  - Local part: alphanumeric, dots, underscores, percent, plus, hyphen
-        # @                   - Single @ symbol
-        # [a-zA-Z0-9.-]+      - Domain: alphanumeric, dots, hyphens
-        # \.                  - Dot before TLD
-        # [a-zA-Z]{2,}$       - TLD: at least 2 letters
-        [[ "$email" =~ ^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$ ]]
-      }
-
-      # Validate UUID or Azure tenant ID
-      validate_uuid() {
-        local uuid="$1"
-        [[ "$uuid" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]] || \
-        [[ "$uuid" =~ ^[a-zA-Z0-9-]+\.onmicrosoft\.com$ ]]
-      }
+      # Populated during setup:
+      # $(git rev-parse --show-toplevel)/write_files/usr/local/lib/headscale-validators.sh
 
   # =========================================================================
   # Secrets Management Library (eliminates code duplication)
@@ -217,110 +89,8 @@ write_files:
   - path: /usr/local/lib/headscale-secrets.sh
     permissions: "0644"
     content: |
-      #!/bin/bash
-      # secrets.sh - Shared secret management functions for Headscale VPS
-      # Provides systemd-creds encryption with graceful degradation
-
-      # Load constants (if available, skip if already loaded to avoid readonly errors)
-      if [ -z "$SYSTEMD_MIN_VERSION" ] && [ -f /etc/headscale/constants.conf ]; then
-        source /etc/headscale/constants.conf
-      fi
-
-      # Local constants
-      readonly CREDSTORE_DIR="/etc/credstore.encrypted"
-
-      # Check if systemd supports credential encryption
-      # Returns: 0 if supported, 1 if not
-      check_systemd_creds_support() {
-        # Check if systemd-creds command exists
-        if ! command -v systemd-creds >/dev/null 2>&1; then
-          return 1
-        fi
-
-        # Check systemd version (need 250+)
-        local systemd_version
-        systemd_version=$(systemctl --version | head -n1 | awk '{print $2}')
-
-        if [ -z "$systemd_version" ]; then
-          return 1
-        fi
-
-        if [ "$systemd_version" -lt "$SYSTEMD_MIN_VERSION" ]; then
-          return 1
-        fi
-
-        return 0
-      }
-
-      # Encrypt a secret file using systemd-creds (if supported)
-      # Args:
-      #   $1 - Path to plaintext secret file
-      #   $2 - Credential name (used in systemd service files)
-      # Returns: 0 on success or graceful fallback, 1 on error
-      encrypt_secret_if_supported() {
-        local plain_file="$1"
-        local cred_name="$2"
-        local encrypted_file="$CREDSTORE_DIR/${cred_name}.cred"
-
-        # Validate inputs
-        if [ -z "$plain_file" ] || [ -z "$cred_name" ]; then
-          echo "Error: encrypt_secret_if_supported() requires 2 arguments" >&2
-          return 1
-        fi
-
-        if [ ! -f "$plain_file" ]; then
-          echo "Error: Secret file not found: $plain_file" >&2
-          return 1
-        fi
-
-        # Check if systemd-creds is supported
-        if ! check_systemd_creds_support; then
-          # Graceful degradation - use plaintext with 600 permissions
-          chmod 600 "$plain_file"
-          return 0
-        fi
-
-        # Create credstore directory if it doesn't exist
-        mkdir -p "$CREDSTORE_DIR"
-        chmod 700 "$CREDSTORE_DIR"
-
-        # Encrypt the secret
-        local encrypt_output encrypt_error
-        encrypt_output=$(systemd-creds encrypt --name="$cred_name" "$plain_file" "$encrypted_file" 2>&1)
-        encrypt_error=$?
-
-        if [ $encrypt_error -eq 0 ]; then
-          chmod 600 "$encrypted_file"
-
-          # Use print_success if available (from headscale-common.sh)
-          if command -v print_success >/dev/null 2>&1; then
-            print_success "Encrypted $cred_name using systemd-creds"
-          else
-            echo "[OK] Encrypted $cred_name using systemd-creds"
-          fi
-
-          return 0
-        else
-          # Encryption failed - fall back to plaintext
-          if command -v print_warning >/dev/null 2>&1; then
-            print_warning "Failed to encrypt $cred_name, using plaintext"
-          else
-            echo "[WARNING] Failed to encrypt $cred_name, using plaintext"
-          fi
-
-          if [ -n "$encrypt_output" ]; then
-            echo "  Error details: $encrypt_output" >&2
-          fi
-
-          chmod 600 "$plain_file"
-          return 0
-        fi
-      }
-
-      # Get systemd version (for debugging/info purposes)
-      get_systemd_version() {
-        systemctl --version | head -n1 | awk '{print $2}'
-      }
+      # Populated during setup:
+      # $(git rev-parse --show-toplevel)/write_files/usr/local/lib/headscale-secrets.sh
 
   # =========================================================================
   # SSH Hardening Configuration
@@ -328,16 +98,8 @@ write_files:
   - path: /etc/ssh/sshd_config.d/99-hardening.conf
     permissions: "0644"
     content: |
-      # Security hardening - SSH keys required
-      PasswordAuthentication no
-      ChallengeResponseAuthentication no
-      PermitRootLogin no
-      MaxAuthTries 3
-      LoginGraceTime 20
-      X11Forwarding no
-      PermitEmptyPasswords no
-      ClientAliveInterval 300
-      ClientAliveCountMax 2
+      # Populated during setup:
+      # $(git rev-parse --show-toplevel)/write_files/etc/ssh/sshd_config.d/99-hardening.conf
 
   # =========================================================================
   # Kernel Hardening (sysctl)
@@ -345,20 +107,8 @@ write_files:
   - path: /etc/sysctl.d/99-security.conf
     permissions: "0644"
     content: |
-      # Network hardening
-      net.ipv4.conf.all.rp_filter = 1
-      net.ipv4.conf.default.rp_filter = 1
-      net.ipv4.conf.all.accept_source_route = 0
-      net.ipv6.conf.all.accept_source_route = 0
-      net.ipv4.conf.all.accept_redirects = 0
-      net.ipv6.conf.all.accept_redirects = 0
-      net.ipv4.conf.all.send_redirects = 0
-      net.ipv4.tcp_syncookies = 1
-      net.ipv4.conf.all.log_martians = 1
-      net.ipv4.icmp_echo_ignore_broadcasts = 1
-      net.ipv4.icmp_ignore_bogus_error_responses = 1
-      kernel.dmesg_restrict = 1
-      kernel.kptr_restrict = 2
+      # Populated during setup:
+      # $(git rev-parse --show-toplevel)/write_files/etc/sysctl.d/99-security.conf
 
   # =========================================================================
   # Configuration Script (placed on PATH, no .sh extension)
@@ -366,332 +116,8 @@ write_files:
   - path: /usr/local/bin/headscale-config
     permissions: "0755"
     content: |
-      #!/bin/bash
-      set -e
-
-      # Load shared libraries (headscale-secrets.sh loads constants.conf)
-      source /usr/local/lib/headscale-common.sh
-      source /usr/local/lib/headscale-validators.sh
-      source /usr/local/lib/headscale-secrets.sh
-
-      ENV_FILE="/etc/environment.d/headscale.conf"
-      TEMPLATES_DIR="/etc/headscale/templates"
-      
-      # Load existing configuration if present
-      load_existing_config() {
-        if [ -f "$ENV_FILE" ]; then
-          source "$ENV_FILE"
-        fi
-      }
-      
-      # Prompt for a value with a default
-      prompt_value() {
-        local var_name="$1"
-        local prompt_text="$2"
-        local default_value="$3"
-        local is_secret="$4"
-        
-        local current_value="${!var_name:-$default_value}"
-        
-        if [ "$is_secret" = "true" ] && [ -n "$current_value" ] && [ "$current_value" != "$default_value" ]; then
-          echo -n "$prompt_text [****hidden****]: "
-        elif [ -n "$current_value" ]; then
-          echo -n "$prompt_text [$current_value]: "
-        else
-          echo -n "$prompt_text: "
-        fi
-        
-        if [ "$is_secret" = "true" ]; then
-          read -s input_value
-          echo ""
-        else
-          read input_value
-        fi
-        
-        if [ -n "$input_value" ]; then
-          printf -v "$var_name" '%s' "$input_value"
-        elif [ -n "$current_value" ]; then
-          printf -v "$var_name" '%s' "$current_value"
-        fi
-      }
-      
-      # Validate all inputs (using shared validation library)
-      validate_inputs() {
-        local valid=true
-
-        validate_domain "$HEADSCALE_DOMAIN" || { print_error "Invalid domain format: $HEADSCALE_DOMAIN"; valid=false; }
-        validate_uuid "$AZURE_TENANT_ID" || { print_error "Invalid tenant ID format: $AZURE_TENANT_ID (expected GUID or *.onmicrosoft.com)"; valid=false; }
-        validate_email "$ALLOWED_EMAIL" || { print_error "Invalid email format: $ALLOWED_EMAIL"; valid=false; }
-
-        if [ -z "$AZURE_CLIENT_ID" ]; then
-          print_error "Azure Client ID cannot be empty"
-          valid=false
-        fi
-
-        if [ -z "$AZURE_CLIENT_SECRET" ]; then
-          print_error "Azure Client Secret cannot be empty"
-          valid=false
-        fi
-
-        if [ "$valid" = false ]; then
-          return 1
-        fi
-        return 0
-      }
-      
-      # Write environment file
-      write_env_file() {
-        mkdir -p "$(dirname "$ENV_FILE")"
-        cat > "$ENV_FILE" << EOF
-      # Headscale Configuration
-      # Generated by headscale-config on $(date)
-      
-      HEADSCALE_DOMAIN="${HEADSCALE_DOMAIN}"
-      AZURE_TENANT_ID="${AZURE_TENANT_ID}"
-      AZURE_CLIENT_ID="${AZURE_CLIENT_ID}"
-      AZURE_CLIENT_SECRET="${AZURE_CLIENT_SECRET}"
-      ALLOWED_EMAIL="${ALLOWED_EMAIL}"
-      EOF
-        chmod 600 "$ENV_FILE"
-        print_success "Environment file written to $ENV_FILE"
-      }
-
-      # Write secret files
-      write_secrets() {
-        local secret_file="/var/lib/headscale/oidc_client_secret"
-        echo -n "${AZURE_CLIENT_SECRET}" > "$secret_file"
-        chown headscale:headscale "$secret_file"
-        chmod 600 "$secret_file"
-        print_success "OIDC client secret written"
-
-        # Encrypt the secret for systemd-creds
-        encrypt_secret_if_supported "$secret_file" "oidc_client_secret"
-
-        # Encrypt cookie_secret if it exists (generated during initial setup)
-        if [ -f /var/lib/headplane/cookie_secret ]; then
-          encrypt_secret_if_supported "/var/lib/headplane/cookie_secret" "cookie_secret"
-        fi
-      }
-      
-      # Generate Headscale API key for Headplane
-      generate_api_key() {
-        if [ ! -f /var/lib/headscale/api_key ]; then
-          echo "Generating Headscale API key for Headplane..."
-          # Start headscale and wait for it to be ready
-          systemctl start headscale
-          
-          # Wait for Headscale to be responsive
-          local retries=${SERVICE_START_RETRY_COUNT}
-          while [ $retries -gt 0 ]; do
-            if headscale users list >/dev/null 2>&1; then
-              break
-            fi
-            sleep ${SERVICE_START_RETRY_DELAY}
-            retries=$((retries - 1))
-          done
-
-          if [ $retries -eq 0 ]; then
-            print_error "Headscale failed to start within ${SERVICE_START_RETRY_COUNT} seconds"
-            return 1
-          fi
-          
-          local api_create_output api_create_error
-          api_create_output=$(headscale apikeys create --expiration ${API_KEY_EXPIRATION_DAYS}d 2>&1)
-          api_create_error=$?
-
-          if [ $api_create_error -ne 0 ]; then
-            print_error "Failed to create API key"
-            echo "  Error details: $api_create_output" >&2
-            return 1
-          fi
-
-          API_KEY=$(echo "$api_create_output" | tail -1)
-          if [ -z "$API_KEY" ]; then
-            print_error "API key creation returned empty result"
-            return 1
-          fi
-
-          local api_key_file="/var/lib/headscale/api_key"
-          echo -n "$API_KEY" > "$api_key_file"
-          chown headscale:headscale "$api_key_file"
-          chmod 600 "$api_key_file"
-          # Record expiration date for rotation tracking
-          date -d "+${API_KEY_EXPIRATION_DAYS} days" +%Y-%m-%d > /var/lib/headscale/api_key_expires
-          chown headscale:headscale /var/lib/headscale/api_key_expires
-          chmod 600 /var/lib/headscale/api_key_expires
-          print_success "Headscale API key generated (expires in ${API_KEY_EXPIRATION_DAYS} days)"
-
-          # Encrypt the API key for systemd-creds
-          encrypt_secret_if_supported "$api_key_file" "headscale_api_key"
-        else
-          print_success "Headscale API key already exists"
-          # Check if key is expiring soon
-          if [ -f /var/lib/headscale/api_key_expires ]; then
-            local expires=$(cat /var/lib/headscale/api_key_expires)
-            local today=$(date +%Y-%m-%d)
-            local days_left=$(( ($(date -d "$expires" +%s) - $(date -d "$today" +%s)) / 86400 ))
-            if [ $days_left -lt ${API_KEY_WARNING_THRESHOLD_DAYS} ]; then
-              print_warning "API key expires in $days_left days - run 'sudo headscale-rotate-apikey' to renew"
-            fi
-          fi
-        fi
-      }
-      
-      # Process templates with envsubst
-      process_templates() {
-        echo ""
-        echo "Processing configuration templates..."
-        
-        # Verify all templates exist
-        local templates=("headscale.yaml.tpl" "headplane.yaml.tpl" "Caddyfile.tpl")
-        for tpl in "${templates[@]}"; do
-          if [ ! -f "$TEMPLATES_DIR/$tpl" ]; then
-            print_error "Template file missing: $TEMPLATES_DIR/$tpl"
-            exit 1
-          fi
-        done
-        
-        # Export variables for envsubst
-        export HEADSCALE_DOMAIN
-        export AZURE_TENANT_ID
-        export AZURE_CLIENT_ID
-        export AZURE_CLIENT_SECRET
-        export ALLOWED_EMAIL
-
-        # Process each template
-        envsubst '${HEADSCALE_DOMAIN} ${AZURE_TENANT_ID} ${AZURE_CLIENT_ID} ${ALLOWED_EMAIL}' \
-          < "$TEMPLATES_DIR/headscale.yaml.tpl" \
-          > /etc/headscale/config.yaml
-        chown headscale:headscale /etc/headscale/config.yaml
-        chmod 640 /etc/headscale/config.yaml
-        print_success "Headscale config generated"
-
-        envsubst '${HEADSCALE_DOMAIN} ${AZURE_TENANT_ID} ${AZURE_CLIENT_ID}' \
-          < "$TEMPLATES_DIR/headplane.yaml.tpl" \
-          > /etc/headplane/config.yaml
-        chown headscale:headscale /etc/headplane/config.yaml
-        chmod 640 /etc/headplane/config.yaml
-        print_success "Headplane config generated"
-        
-        envsubst '${HEADSCALE_DOMAIN}' \
-          < "$TEMPLATES_DIR/Caddyfile.tpl" \
-          > /etc/caddy/Caddyfile
-        chmod 644 /etc/caddy/Caddyfile
-        print_success "Caddyfile generated"
-      }
-      
-      # Restart services
-      restart_services() {
-        echo ""
-        echo "Restarting services..."
-        
-        systemctl restart headscale && print_success "Headscale restarted" || print_error "Headscale failed to restart"
-        sleep 2
-        
-        # Generate API key after headscale is running
-        generate_api_key
-        
-        if [ -f /opt/headplane/build/server/index.js ]; then
-          systemctl restart headplane && print_success "Headplane restarted" || print_error "Headplane failed to restart"
-        else
-          print_error "Headplane not running - check logs: journalctl -u headplane -n 50"
-        fi
-        
-        systemctl restart caddy && print_success "Caddy restarted" || print_error "Caddy failed to restart"
-      }
-      
-      # Show status
-      show_status() {
-        echo ""
-        echo "=========================================="
-        echo "  Service Status"
-        echo "=========================================="
-        echo ""
-        
-        systemctl is-active headscale >/dev/null 2>&1 && print_success "Headscale is running" || print_error "Headscale is not running"
-        systemctl is-active caddy >/dev/null 2>&1 && print_success "Caddy is running" || print_error "Caddy is not running"
-        systemctl is-active fail2ban >/dev/null 2>&1 && print_success "Fail2ban is running" || print_error "Fail2ban is not running"
-        
-        if [ -f /opt/headplane/build/server/index.js ]; then
-          systemctl is-active headplane >/dev/null 2>&1 && print_success "Headplane is running" || print_error "Headplane is not running"
-        fi
-        
-        echo ""
-        echo "=========================================="
-        echo "  Endpoints"
-        echo "=========================================="
-        echo ""
-        echo "  Headplane UI:  https://${HEADSCALE_DOMAIN}/admin"
-        echo "  Headscale API: https://${HEADSCALE_DOMAIN}/api"
-        echo ""
-        echo "=========================================="
-        echo "  Client Connection"
-        echo "=========================================="
-        echo ""
-        echo "  tailscale up --login-server https://${HEADSCALE_DOMAIN}"
-        echo ""
-      }
-      
-      # Main configuration flow
-      main() {
-        print_banner "Headscale + Headplane Configuration"
-        load_existing_config
-
-        # Skip prompts if all required variables are already set (for automated deployment)
-        if [ -n "$HEADSCALE_DOMAIN" ] && [ -n "$AZURE_TENANT_ID" ] && [ -n "$AZURE_CLIENT_ID" ] && [ -n "$AZURE_CLIENT_SECRET" ] && [ -n "$ALLOWED_EMAIL" ]; then
-          echo "Using provided configuration values..."
-        else
-          echo "For Azure AD setup instructions, see:"
-          echo "  https://github.com/anonhostpi/Headscale-VPS/blob/main/AZURE_AD_SETUP.md"
-          echo ""
-
-          prompt_value "HEADSCALE_DOMAIN" "Domain (e.g., vpn.example.com)" ""
-          prompt_value "AZURE_TENANT_ID" "Azure Tenant ID (e.g., xxx.onmicrosoft.com or GUID)" ""
-          prompt_value "AZURE_CLIENT_ID" "Azure Application (Client) ID" ""
-          prompt_value "AZURE_CLIENT_SECRET" "Azure Client Secret Value" "" "true"
-          prompt_value "ALLOWED_EMAIL" "Allowed Email Address (for login)" ""
-        fi
-        
-        echo ""
-        echo "Configuration Summary:"
-        echo "  Domain:        ${HEADSCALE_DOMAIN}"
-        echo "  Tenant ID:     ${AZURE_TENANT_ID}"
-        echo "  Client ID:     ${AZURE_CLIENT_ID}"
-        echo "  Client Secret: ****"
-        echo "  Allowed Email: ${ALLOWED_EMAIL}"
-        echo ""
-
-        # Validate inputs before proceeding
-        if ! validate_inputs; then
-          print_error "Please fix the validation errors above and try again."
-          exit 1
-        fi
-
-        # Skip confirmation if all env vars are set (automated deployment)
-        if [ -n "$HEADSCALE_DOMAIN" ] && [ -n "$AZURE_TENANT_ID" ] && [ -n "$AZURE_CLIENT_ID" ] && [ -n "$AZURE_CLIENT_SECRET" ] && [ -n "$ALLOWED_EMAIL" ]; then
-          echo "Applying configuration automatically..."
-          write_env_file
-          write_secrets
-          process_templates
-          restart_services
-          show_status
-        else
-          read -p "Apply this configuration? [y/N] " confirm
-          if [[ "$confirm" =~ ^[Yy]$ ]]; then
-            write_env_file
-            write_secrets
-            process_templates
-            restart_services
-            show_status
-          else
-            echo "Configuration cancelled."
-            exit 1
-          fi
-        fi
-      }
-      
-      # Run main
-      main "$@"
+      # Populated during setup:
+      # $(git rev-parse --show-toplevel)/write_files/usr/local/bin/headscale-config
 
   # =========================================================================
   # Template: Headscale Configuration
@@ -699,81 +125,8 @@ write_files:
   - path: /etc/headscale/templates/headscale.yaml.tpl
     permissions: "0644"
     content: |
-      # Headscale Configuration - Production
-      # Generated from template - do not edit directly
-      # Run 'sudo headscale-config' to regenerate
-      
-      server_url: https://${HEADSCALE_DOMAIN}
-      listen_addr: 127.0.0.1:8080
-      metrics_listen_addr: 127.0.0.1:9090
-      grpc_listen_addr: 127.0.0.1:50443
-      grpc_allow_insecure: false
-      
-      noise:
-        private_key_path: /var/lib/headscale/noise_private.key
-      
-      prefixes:
-        v4: 100.64.0.0/10
-        v6: fd7a:115c:a1e0::/48
-        allocation: sequential
-      
-      derp:
-        server:
-          enabled: true
-          region_id: 999
-          region_code: vps
-          region_name: VPS DERP
-          stun_listen_addr: 0.0.0.0:3478
-          private_key_path: /var/lib/headscale/derp_private.key
-        urls:
-          - https://controlplane.tailscale.com/derpmap/default
-        auto_update_enabled: true
-        update_frequency: 24h
-      
-      disable_check_updates: false
-      ephemeral_node_inactivity_timeout: 30m
-      
-      database:
-        type: sqlite
-        sqlite:
-          path: /var/lib/headscale/db.sqlite
-      
-      log:
-        format: text
-        level: info
-      
-      dns:
-        magic_dns: true
-        base_domain: headscale.local
-        nameservers:
-          global:
-            - 1.1.1.1
-            - 8.8.8.8
-          split: {}
-        search_domains: []
-        extra_records: []
-      
-      # Azure AD OIDC Configuration
-      oidc:
-        only_start_if_oidc_is_available: false
-        issuer: https://login.microsoftonline.com/${AZURE_TENANT_ID}/v2.0
-        client_id: ${AZURE_CLIENT_ID}
-        # systemd LoadCredentialEncrypted makes secrets available in $CREDENTIALS_DIRECTORY
-        # Falls back to plaintext path if encrypted credentials don't exist
-        client_secret_path: /run/credentials/headscale.service/oidc_client_secret
-        scope:
-          - openid
-          - profile
-          - email
-        extra_params:
-          prompt: select_account
-        allowed_domains: []
-        allowed_users:
-          - ${ALLOWED_EMAIL}
-      
-      # ACL Policy - using database mode for Headplane management
-      policy:
-        mode: database
+      # Populated during setup:
+      # $(git rev-parse --show-toplevel)/write_files/etc/headscale/templates/headscale.yaml.tpl
 
   # =========================================================================
   # Template: Headplane Configuration
@@ -781,44 +134,8 @@ write_files:
   - path: /etc/headscale/templates/headplane.yaml.tpl
     permissions: "0644"
     content: |
-      # Headplane Configuration - Production
-      # Generated from template - do not edit directly
-      # Run 'sudo headscale-config' to regenerate
-      
-      # NOTE: Headplane data is owned by headscale user for simplicity
-      # since this VPS's sole purpose is running Headscale + Headplane
-      
-      server:
-        host: 127.0.0.1
-        port: 3000
-        base_url: https://${HEADSCALE_DOMAIN}
-        cookie_secret_path: /run/credentials/headplane.service/cookie_secret
-        cookie_secure: true
-        cookie_max_age: 86400
-        data_path: /var/lib/headplane
-
-      headscale:
-        url: http://127.0.0.1:8080
-        public_url: https://${HEADSCALE_DOMAIN}
-        config_path: /etc/headscale/config.yaml
-        config_strict: false
-
-      # Azure AD OIDC Configuration
-      # IMPORTANT: Must use the SAME Azure App as Headscale
-      oidc:
-        # systemd LoadCredentialEncrypted makes secrets available in $CREDENTIALS_DIRECTORY
-        # Falls back to plaintext paths if encrypted credentials don't exist
-        headscale_api_key_path: /run/credentials/headplane.service/headscale_api_key
-        issuer: https://login.microsoftonline.com/${AZURE_TENANT_ID}/v2.0
-        client_id: ${AZURE_CLIENT_ID}
-        client_secret_path: /run/credentials/headplane.service/oidc_client_secret
-        token_endpoint_auth_method: client_secret_post
-        scope: openid email profile
-        disable_api_key_login: false
-      
-      integration:
-        proc:
-          enabled: true
+      # Populated during setup:
+      # $(git rev-parse --show-toplevel)/write_files/etc/headscale/templates/headplane.yaml.tpl
 
   # =========================================================================
   # Template: Caddyfile
@@ -826,77 +143,8 @@ write_files:
   - path: /etc/headscale/templates/Caddyfile.tpl
     permissions: "0644"
     content: |
-      # Caddyfile - Reverse proxy for Headscale + Headplane
-      # Generated from template - do not edit directly
-      # Run 'sudo headscale-config' to regenerate
-      
-      ${HEADSCALE_DOMAIN} {
-          encode gzip
-          
-          # Headplane admin UI and auth
-          handle /admin* {
-              reverse_proxy 127.0.0.1:3000
-          }
-          
-          # Headplane auth callback
-          handle /auth/* {
-              reverse_proxy 127.0.0.1:3000
-          }
-          
-          # Headscale OIDC endpoints
-          handle /oidc/* {
-              reverse_proxy 127.0.0.1:8080
-          }
-          
-          # Headscale API
-          handle /api/* {
-              reverse_proxy 127.0.0.1:8080
-          }
-          
-          # Headscale noise protocol (Tailscale clients)
-          handle /ts2021 {
-              reverse_proxy 127.0.0.1:8080
-          }
-          
-          # Headscale machine registration
-          handle /machine/* {
-              reverse_proxy 127.0.0.1:8080
-          }
-          
-          # Headscale key endpoints
-          handle /key {
-              reverse_proxy 127.0.0.1:8080
-          }
-          
-          # Headscale register endpoint
-          handle /register/* {
-              reverse_proxy 127.0.0.1:8080
-          }
-          
-          # Apple device configuration
-          handle /apple/* {
-              reverse_proxy 127.0.0.1:8080
-          }
-          
-          # Windows device configuration
-          handle /windows/* {
-              reverse_proxy 127.0.0.1:8080
-          }
-          
-          # Root redirects to Headplane admin
-          handle {
-              redir /admin permanent
-          }
-          
-          # Structured logging for fail2ban
-          log {
-              output file /var/log/caddy/access.log {
-                  roll_size 10mb
-                  roll_keep 5
-              }
-              format json
-          }
-      }
+      # Populated during setup:
+      # $(git rev-parse --show-toplevel)/write_files/etc/headscale/templates/Caddyfile.tpl
 
   # =========================================================================
   # Headscale Systemd Service (Hardened)
@@ -904,54 +152,8 @@ write_files:
   - path: /etc/systemd/system/headscale.service
     permissions: "0644"
     content: |
-      [Unit]
-      Description=Headscale - Tailscale control server
-      After=network-online.target
-      Wants=network-online.target
-      
-      [Service]
-      Type=simple
-      User=headscale
-      Group=headscale
-
-      # Load encrypted credentials (automatically decrypted by systemd)
-      # Falls back to plaintext files if encrypted credentials don't exist
-      LoadCredentialEncrypted=oidc_client_secret:/etc/credstore.encrypted/oidc_client_secret.cred
-      LoadCredential=oidc_client_secret:/var/lib/headscale/oidc_client_secret
-
-      ExecStart=/usr/local/bin/headscale serve
-      Restart=always
-      RestartSec=5
-      RuntimeDirectory=headscale
-      RuntimeDirectoryMode=0755
-
-      # Logging - Headscale outputs to stderr, redirect to file for fail2ban
-      StandardOutput=append:/var/log/headscale/headscale.log
-      StandardError=append:/var/log/headscale/headscale.log
-
-      # Hardening
-      NoNewPrivileges=true
-      PrivateTmp=true
-      ProtectSystem=strict
-      ProtectHome=true
-      ReadWritePaths=/var/lib/headscale /var/log/headscale
-      ProtectKernelTunables=true
-      ProtectKernelModules=true
-      ProtectControlGroups=true
-      RestrictSUIDSGID=true
-      RestrictNamespaces=true
-      LockPersonality=true
-      MemoryDenyWriteExecute=true
-      RestrictRealtime=true
-      CapabilityBoundingSet=CAP_NET_BIND_SERVICE
-      SystemCallFilter=@system-service
-      SystemCallArchitectures=native
-      PrivateDevices=true
-      ProtectClock=true
-      ProtectHostname=true
-
-      [Install]
-      WantedBy=multi-user.target
+      # Populated during setup:
+      # $(git rev-parse --show-toplevel)/write_files/etc/systemd/system/headscale.service
 
   # =========================================================================
   # Headplane Systemd Service (Hardened)
@@ -959,58 +161,8 @@ write_files:
   - path: /etc/systemd/system/headplane.service
     permissions: "0644"
     content: |
-      [Unit]
-      Description=Headplane - Web UI for Headscale
-      After=network-online.target headscale.service
-      Wants=network-online.target
-      Requires=headscale.service
-      
-      [Service]
-      Type=simple
-      User=headscale
-      Group=headscale
-
-      # Load encrypted credentials (automatically decrypted by systemd)
-      # Falls back to plaintext files if encrypted credentials don't exist
-      LoadCredentialEncrypted=oidc_client_secret:/etc/credstore.encrypted/oidc_client_secret.cred
-      LoadCredential=oidc_client_secret:/var/lib/headscale/oidc_client_secret
-      LoadCredentialEncrypted=headscale_api_key:/etc/credstore.encrypted/headscale_api_key.cred
-      LoadCredential=headscale_api_key:/var/lib/headscale/api_key
-      LoadCredentialEncrypted=cookie_secret:/etc/credstore.encrypted/cookie_secret.cred
-      LoadCredential=cookie_secret:/var/lib/headplane/cookie_secret
-
-      Environment=HEADPLANE_CONFIG_PATH=/etc/headplane/config.yaml
-      Environment=NODE_ENV=production
-      Environment=NVM_DIR=/opt/nvm
-      WorkingDirectory=/opt/headplane
-      ExecStart=/opt/nvm/versions/node/v25.2.1/bin/node /opt/headplane/build/server/index.js
-      Restart=always
-      RestartSec=5
-
-      # Hardening
-      # NOTE: MemoryDenyWriteExecute is NOT used because Node.js V8 JIT
-      # compilation requires write+execute memory pages (W^X exception)
-      NoNewPrivileges=true
-      PrivateTmp=true
-      ProtectSystem=strict
-      ProtectHome=true
-      ReadWritePaths=/var/lib/headscale /var/lib/headplane /etc/headscale
-      ProtectKernelTunables=true
-      ProtectKernelModules=true
-      ProtectControlGroups=true
-      RestrictSUIDSGID=true
-      RestrictNamespaces=true
-      LockPersonality=true
-      RestrictRealtime=true
-      CapabilityBoundingSet=
-      SystemCallFilter=@system-service @pkey
-      SystemCallArchitectures=native
-      PrivateDevices=true
-      ProtectClock=true
-      ProtectHostname=true
-
-      [Install]
-      WantedBy=multi-user.target
+      # Populated during setup:
+      # $(git rev-parse --show-toplevel)/write_files/etc/systemd/system/headplane.service
 
   # =========================================================================
   # Headplane Install Script (separate from cloud-init for flexibility)
@@ -1018,146 +170,8 @@ write_files:
   - path: /opt/install-headplane.sh
     permissions: "0755"
     content: |
-      #!/bin/bash
-      set -e
-      
-      echo "=========================================="
-      echo "  Installing Headplane (Native Mode)"
-      echo "=========================================="
-      
-      # Load version configuration
-      source /etc/headscale/versions.conf
-      NODE_VERSION="${NODE_VERSION:-22}"
-      HEADPLANE_VERSION="${HEADPLANE_VERSION:-}"
-      
-      # Install nvm (Node Version Manager) system-wide
-      echo "[1/6] Installing nvm..."
-      export NVM_DIR="/opt/nvm"
-      mkdir -p "$NVM_DIR"
-
-      # Download NVM with checksum verification (prevents supply chain attacks)
-      # NVM_VERSION and NVM_SHA256 loaded from versions.conf
-      NVM_INSTALL_SCRIPT="/tmp/nvm-install-${NVM_VERSION}.sh"
-
-      curl -sSL "https://raw.githubusercontent.com/nvm-sh/nvm/${NVM_VERSION}/install.sh" -o "$NVM_INSTALL_SCRIPT"
-
-      # Verify checksum
-      echo "${NVM_SHA256}  ${NVM_INSTALL_SCRIPT}" | sha256sum -c - || {
-        echo "ERROR: NVM install script checksum verification failed!"
-        rm -f "$NVM_INSTALL_SCRIPT"
-        exit 1
-      }
-
-      # Execute verified script
-      bash "$NVM_INSTALL_SCRIPT"
-      rm -f "$NVM_INSTALL_SCRIPT"
-      
-      # Load nvm
-      [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
-
-      # Install Node.js with SHA256 verification
-      echo "[2/6] Installing Node.js ${NODE_VERSION}..."
-
-      # Download Node.js binary
-      ARCH="$(uname -m)"
-      if [ "$ARCH" = "x86_64" ]; then
-        NODE_ARCH="x64"
-      elif [ "$ARCH" = "aarch64" ]; then
-        NODE_ARCH="arm64"
-      else
-        echo "ERROR: Unsupported architecture: $ARCH"
-        exit 1
-      fi
-
-      NODE_URL="https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz"
-      NODE_TARBALL="/tmp/node-v${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz"
-
-      # Download Node.js
-      curl -sSL "$NODE_URL" -o "$NODE_TARBALL"
-
-      # Verify SHA256 checksum (only if NODE_SHA256 is set)
-      if [ -n "${NODE_SHA256:-}" ]; then
-        echo "Verifying Node.js checksum..."
-        echo "${NODE_SHA256}  ${NODE_TARBALL}" | sha256sum -c - || {
-          echo "ERROR: Node.js checksum verification failed!"
-          echo "Expected: ${NODE_SHA256}"
-          echo "Got: $(sha256sum ${NODE_TARBALL} | awk '{print $1}')"
-          rm -f "$NODE_TARBALL"
-          exit 1
-        }
-        echo "✓ Node.js checksum verified"
-      else
-        echo "WARNING: NODE_SHA256 not set, skipping checksum verification"
-      fi
-
-      # Install via nvm using the verified tarball
-      nvm install "${NODE_VERSION}"
-      nvm use "${NODE_VERSION}"
-      nvm alias default "${NODE_VERSION}"
-
-      # Cleanup
-      rm -f "$NODE_TARBALL"
-      
-      # Create symlinks for system-wide access
-      ln -sf "$NVM_DIR/versions/node/$(nvm current)/bin/node" /usr/local/bin/node
-      ln -sf "$NVM_DIR/versions/node/$(nvm current)/bin/npm" /usr/local/bin/npm
-      ln -sf "$NVM_DIR/versions/node/$(nvm current)/bin/npx" /usr/local/bin/npx
-      
-      # Install pnpm
-      echo "[3/6] Installing pnpm..."
-      npm install -g pnpm
-      ln -sf "$NVM_DIR/versions/node/$(nvm current)/bin/pnpm" /usr/local/bin/pnpm
-      
-      # Clone Headplane
-      echo "[4/6] Cloning Headplane..."
-      cd /opt
-      if [ -d headplane ] && [ -d headplane/.git ]; then
-        cd headplane
-        git fetch --all --tags
-      else
-        rm -rf headplane  # Clean up any broken directory
-        git clone https://github.com/tale/headplane.git
-        cd headplane
-      fi
-      
-      # Checkout version (configured or latest tag)
-      if [ -n "$HEADPLANE_VERSION" ]; then
-        TARGET_VERSION="$HEADPLANE_VERSION"
-      else
-        TARGET_VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "main")
-      fi
-      echo "    Using version: ${TARGET_VERSION}"
-      git checkout "${TARGET_VERSION}"
-      
-      # Install dependencies and build
-      echo "[5/6] Building Headplane..."
-      pnpm install
-
-      # Build WASM module for SSH functionality (required for v0.6.1+)
-      echo "    Building hp_ssh.wasm..."
-      export GOPATH=/tmp/go
-      export GOMODCACHE=/tmp/go/pkg/mod
-      export GOCACHE=/tmp/go/cache
-      cat "$(go env GOROOT)/lib/wasm/wasm_exec.js" >> app/wasm_exec.js
-      GOOS=js GOARCH=wasm go build -o app/hp_ssh.wasm ./cmd/hp_ssh
-
-      # Build Node.js application
-      echo "    Building Node.js application..."
-      pnpm build
-      
-      # Set ownership
-      echo "[6/6] Setting permissions..."
-      chown -R headscale:headscale /opt/headplane
-      
-      echo ""
-      echo "=========================================="
-      echo "  Headplane Installation Complete"
-      echo "=========================================="
-      echo ""
-      echo "  To start Headplane:"
-      echo "    sudo systemctl enable headplane"
-      echo "    sudo systemctl start headplane"
-      echo ""
+      # Populated during setup:
+      # $(git rev-parse --show-toplevel)/write_files/opt/install-headplane.sh
 
   # =========================================================================
   # API Key Rotation Script (automates key renewal before expiration)
@@ -1165,101 +179,8 @@ write_files:
   - path: /usr/local/bin/headscale-rotate-apikey
     permissions: "0755"
     content: |
-      #!/bin/bash
-      set -e
-
-      # Load shared libraries (headscale-secrets.sh loads constants.conf)
-      source /usr/local/lib/headscale-common.sh
-      source /usr/local/lib/headscale-secrets.sh
-
-      API_KEY_FILE="/var/lib/headscale/api_key"
-      API_KEY_EXPIRES="/var/lib/headscale/api_key_expires"
-      HEADPLANE_CONFIG="/etc/headplane/config.yaml"
-      CREDSTORE="/etc/credstore.encrypted"
-
-      echo "Rotating Headscale API key..."
-      
-      # Ensure headscale is running
-      if ! systemctl is-active --quiet headscale; then
-        echo -e "${RED}[ERROR]${NC} Headscale is not running"
-        exit 1
-      fi
-      
-      # Create new API key
-      local api_create_output api_create_error
-      api_create_output=$(headscale apikeys create --expiration ${API_KEY_EXPIRATION_DAYS}d 2>&1)
-      api_create_error=$?
-
-      if [ $api_create_error -ne 0 ]; then
-        echo -e "${RED}[ERROR]${NC} Failed to create new API key"
-        echo "  Error details: $api_create_output" >&2
-        exit 1
-      fi
-
-      NEW_KEY=$(echo "$api_create_output" | tail -1)
-
-      if [ -z "$NEW_KEY" ]; then
-        echo -e "${RED}[ERROR]${NC} API key creation returned empty result"
-        echo "  Output: $api_create_output" >&2
-        exit 1
-      fi
-
-      # Backup old key
-      if [ -f "$API_KEY_FILE" ]; then
-        cp "$API_KEY_FILE" "${API_KEY_FILE}.bak"
-      fi
-
-      # Write new key
-      echo -n "$NEW_KEY" > "$API_KEY_FILE"
-      chown headscale:headscale "$API_KEY_FILE"
-      chmod 600 "$API_KEY_FILE"
-
-      # Update expiration date
-      date -d "+${API_KEY_EXPIRATION_DAYS} days" +%Y-%m-%d > "$API_KEY_EXPIRES"
-      chown headscale:headscale "$API_KEY_EXPIRES"
-      chmod 600 "$API_KEY_EXPIRES"
-
-      echo -e "${GREEN}[OK]${NC} New API key generated (expires in ${API_KEY_EXPIRATION_DAYS} days)"
-
-      # Encrypt the new API key for systemd-creds
-      encrypt_secret_if_supported "$API_KEY_FILE" "headscale_api_key"
-
-      # Restart Headplane to use new key
-      if systemctl is-active --quiet headplane; then
-        systemctl restart headplane
-        echo -e "${GREEN}[OK]${NC} Headplane restarted with new key"
-      fi
-
-      # Expire old API keys (keeps only the newest)
-      echo "Expiring old API keys..."
-      local list_output list_error
-      list_output=$(headscale apikeys list -o json 2>&1)
-      list_error=$?
-
-      if [ $list_error -ne 0 ]; then
-        echo -e "${YELLOW}[!!]${NC} Warning: Could not list API keys for cleanup"
-        echo "  Error details: $list_output" >&2
-      else
-        echo "$list_output" | \
-          jq -r --arg newkey "$NEW_KEY" '.[] | select(.key != $newkey) | .prefix' | \
-          while read -r prefix; do
-            if [ -n "$prefix" ]; then
-              local expire_output expire_error
-              expire_output=$(headscale apikeys expire --prefix "$prefix" 2>&1)
-              expire_error=$?
-
-              if [ $expire_error -eq 0 ]; then
-                echo -e "${YELLOW}[!!]${NC} Expired old key: $prefix"
-              else
-                echo -e "${YELLOW}[!!]${NC} Warning: Failed to expire key $prefix"
-                echo "  Error details: $expire_output" >&2
-              fi
-            fi
-          done
-      fi
-
-      echo ""
-      echo "Rotation complete. New key expires: $(cat $API_KEY_EXPIRES)"
+      # Populated during setup:
+      # $(git rev-parse --show-toplevel)/write_files/usr/local/bin/headscale-rotate-apikey
 
   # =========================================================================
   # Cron job for automatic API key rotation (runs weekly, rotates if < 14 days left)
@@ -1267,27 +188,8 @@ write_files:
   - path: /etc/cron.weekly/headscale-apikey-check
     permissions: "0755"
     content: |
-      #!/bin/bash
-      # Check if API key expires in less than 14 days and rotate if needed
-      
-      API_KEY_EXPIRES="/var/lib/headscale/api_key_expires"
-      LOGFILE="/var/log/headscale/apikey-rotation.log"
-      
-      if [ ! -f "$API_KEY_EXPIRES" ]; then
-        echo "$(date): No expiration file found, skipping" >> "$LOGFILE"
-        exit 0
-      fi
-      
-      EXPIRES=$(cat "$API_KEY_EXPIRES")
-      TODAY=$(date +%Y-%m-%d)
-      DAYS_LEFT=$(( ($(date -d "$EXPIRES" +%s) - $(date -d "$TODAY" +%s)) / 86400 ))
-      
-      if [ $DAYS_LEFT -lt 14 ]; then
-        echo "$(date): API key expires in $DAYS_LEFT days, rotating..." >> "$LOGFILE"
-        /usr/local/bin/headscale-rotate-apikey >> "$LOGFILE" 2>&1
-      else
-        echo "$(date): API key valid for $DAYS_LEFT more days" >> "$LOGFILE"
-      fi
+      # Populated during setup:
+      # $(git rev-parse --show-toplevel)/write_files/etc/cron.weekly/headscale-apikey-check
 
   # =========================================================================
   # Secrets Migration Script (migrates plaintext secrets to systemd-creds)
@@ -1295,152 +197,8 @@ write_files:
   - path: /usr/local/bin/headscale-migrate-secrets
     permissions: "0755"
     content: |
-      #!/bin/bash
-      set -e
-
-      # Load shared libraries
-      source /usr/local/lib/headscale-common.sh
-      source /usr/local/lib/headscale-secrets.sh
-
-      CREDSTORE="/etc/credstore.encrypted"
-      OIDC_SECRET_PLAIN="/var/lib/headscale/oidc_client_secret"
-      API_KEY_PLAIN="/var/lib/headscale/api_key"
-      SMTP_PASSWORD_PLAIN="/etc/msmtp-password"
-
-      print_banner "Headscale Secrets Migration"
-
-      # Check systemd-creds support
-      if ! check_systemd_creds_support; then
-        SYSTEMD_VERSION=$(get_systemd_version)
-        print_error "systemd-creds not supported (version $SYSTEMD_VERSION < 250)"
-        print_info "Keeping plaintext secrets with 600 permissions"
-        exit 1
-      fi
-
-      # Create credstore directory
-      mkdir -p "$CREDSTORE"
-      chmod 700 "$CREDSTORE"
-
-      # Function to encrypt a secret using systemd-creds
-      # Wrapper around shared function for this script
-      encrypt_secret() {
-        local plain_file="$1"
-        local cred_name="$2"
-
-        if [ ! -f "$plain_file" ]; then
-          print_warning "Plaintext secret not found: $plain_file (skipping)"
-          return 0
-        fi
-
-        if [ ! -s "$plain_file" ]; then
-          print_warning "Plaintext secret is empty: $plain_file (skipping)"
-          return 0
-        fi
-
-        print_info "Encrypting $cred_name..."
-
-        # Use shared encryption function
-        if encrypt_secret_if_supported "$plain_file" "$cred_name"; then
-          # Backup plaintext (for rollback)
-          cp "$plain_file" "${plain_file}.plaintext-backup"
-          chmod 600 "${plain_file}.plaintext-backup"
-          print_info "Plaintext backup: ${plain_file}.plaintext-backup"
-          return 0
-        else
-          print_error "Failed to encrypt $cred_name"
-          return 1
-        fi
-      }
-
-      # Function to rollback to plaintext
-      rollback_secret() {
-        local plain_file="$1"
-        local cred_name="$2"
-        local encrypted_file="$CREDSTORE/${cred_name}.cred"
-        local backup_file="${plain_file}.plaintext-backup"
-
-        if [ -f "$encrypted_file" ]; then
-          rm -f "$encrypted_file"
-          print_info "Removed encrypted credential: $cred_name"
-        fi
-
-        if [ -f "$backup_file" ]; then
-          mv "$backup_file" "$plain_file"
-          print_success "Restored plaintext from backup: $plain_file"
-        fi
-      }
-
-      # Main migration logic
-      case "${1:-migrate}" in
-        migrate)
-          print_info "Migrating secrets to systemd-creds encryption..."
-          echo ""
-
-          # Migrate OIDC client secret
-          if encrypt_secret "$OIDC_SECRET_PLAIN" "oidc_client_secret"; then
-            print_success "OIDC secret migration complete"
-          else
-            print_error "OIDC secret migration failed"
-          fi
-
-          # Migrate API key
-          if encrypt_secret "$API_KEY_PLAIN" "headscale_api_key"; then
-            print_success "API key migration complete"
-          else
-            print_error "API key migration failed"
-          fi
-
-          # Migrate SMTP password
-          if encrypt_secret "$SMTP_PASSWORD_PLAIN" "smtp_password"; then
-            print_success "SMTP password migration complete"
-          else
-            print_error "SMTP password migration failed"
-          fi
-
-          echo ""
-          print_info "Migration summary:"
-          ls -lh "$CREDSTORE/" 2>/dev/null || print_warning "No credentials encrypted"
-          echo ""
-          print_warning "To apply changes, update service files and restart services:"
-          print_info "  systemctl daemon-reload"
-          print_info "  systemctl restart headscale headplane"
-          ;;
-
-        rollback)
-          print_warning "Rolling back to plaintext secrets..."
-          echo ""
-
-          rollback_secret "$OIDC_SECRET_PLAIN" "oidc_client_secret"
-          rollback_secret "$API_KEY_PLAIN" "headscale_api_key"
-          rollback_secret "$SMTP_PASSWORD_PLAIN" "smtp_password"
-
-          echo ""
-          print_success "Rollback complete - using plaintext secrets"
-          ;;
-
-        status)
-          print_info "Secrets encryption status:"
-          echo ""
-
-          for secret in oidc_client_secret headscale_api_key smtp_password; do
-            if [ -f "$CREDSTORE/${secret}.cred" ]; then
-              print_success "$secret: encrypted"
-            else
-              print_warning "$secret: plaintext"
-            fi
-          done
-          ;;
-
-        *)
-          echo "Usage: $0 {migrate|rollback|status}"
-          echo ""
-          echo "Commands:"
-          echo "  migrate   - Encrypt plaintext secrets using systemd-creds"
-          echo "  rollback  - Restore plaintext secrets from backups"
-          echo "  status    - Show encryption status of secrets"
-          exit 1
-          ;;
-      esac
+      # Populated during setup:
+      # $(git rev-parse --show-toplevel)/write_files/usr/local/bin/headscale-migrate-secrets
 
   # =========================================================================
   # Health Check Script (monitors system health)
@@ -1448,129 +206,8 @@ write_files:
   - path: /usr/local/bin/headscale-healthcheck
     permissions: "0755"
     content: |
-      #!/bin/bash
-      # Comprehensive health check for Headscale deployment
-      # Runs every 5 minutes via systemd timer
-
-      # Load constants
-      source /etc/headscale/constants.conf
-
-      HEALTH_STATUS=0
-      REPORT=""
-
-      # Check if service is active
-      check_service() {
-        local service=$1
-        if systemctl is-active --quiet "$service"; then
-          REPORT="${REPORT}✓ $service is running\n"
-        else
-          REPORT="${REPORT}✗ $service is NOT running\n"
-          HEALTH_STATUS=1
-        fi
-      }
-
-      # Check if port is listening
-      check_port() {
-        local port=$1
-        local description=$2
-        if ss -tuln 2>/dev/null | grep -q ":$port "; then
-          REPORT="${REPORT}✓ Port $port ($description) is listening\n"
-        else
-          REPORT="${REPORT}✗ Port $port ($description) is NOT listening\n"
-          HEALTH_STATUS=1
-        fi
-      }
-
-      # Check API endpoint
-      check_api_endpoint() {
-        if curl -sf "http://localhost:8080/health" >/dev/null 2>&1; then
-          REPORT="${REPORT}✓ Headscale API is reachable\n"
-        else
-          REPORT="${REPORT}✗ Headscale API is NOT reachable\n"
-          HEALTH_STATUS=1
-        fi
-      }
-
-      # Check TLS certificate expiry
-      check_cert_expiry() {
-        if [ -f /etc/environment.d/headscale.conf ]; then
-          DOMAIN=$(grep HEADSCALE_DOMAIN /etc/environment.d/headscale.conf | cut -d= -f2 | tr -d '"' 2>/dev/null)
-          if [ -n "$DOMAIN" ]; then
-            CERT="/var/lib/caddy/.local/share/caddy/certificates/acme-v02.api.letsencrypt.org-directory/${DOMAIN}/${DOMAIN}.crt"
-
-            if [ -f "$CERT" ]; then
-              EXPIRY=$(openssl x509 -enddate -noout -in "$CERT" 2>/dev/null | cut -d= -f2)
-              if [ -n "$EXPIRY" ]; then
-                EXPIRY_EPOCH=$(date -d "$EXPIRY" +%s 2>/dev/null)
-                NOW_EPOCH=$(date +%s)
-                DAYS_LEFT=$(( (EXPIRY_EPOCH - NOW_EPOCH) / 86400 ))
-
-                if [ $DAYS_LEFT -gt ${CERT_EXPIRY_WARNING_DAYS} ]; then
-                  REPORT="${REPORT}✓ TLS certificate expires in $DAYS_LEFT days\n"
-                else
-                  REPORT="${REPORT}⚠ TLS certificate expires in $DAYS_LEFT days (renew soon!)\n"
-                  HEALTH_STATUS=1
-                fi
-              fi
-            fi
-          fi
-        fi
-      }
-
-      # Check API key expiry
-      check_api_key_expiry() {
-        if [ -f /var/lib/headscale/api_key_expires ]; then
-          EXPIRES=$(cat /var/lib/headscale/api_key_expires 2>/dev/null)
-          if [ -n "$EXPIRES" ]; then
-            EXPIRES_EPOCH=$(date -d "$EXPIRES" +%s 2>/dev/null)
-            NOW_EPOCH=$(date +%s)
-            DAYS_LEFT=$(( (EXPIRES_EPOCH - NOW_EPOCH) / 86400 ))
-
-            if [ $DAYS_LEFT -gt ${API_KEY_WARNING_THRESHOLD_DAYS} ]; then
-              REPORT="${REPORT}✓ API key expires in $DAYS_LEFT days\n"
-            else
-              REPORT="${REPORT}⚠ API key expires in $DAYS_LEFT days (rotation recommended)\n"
-            fi
-          fi
-        fi
-      }
-
-      # Check disk space
-      check_disk_space() {
-        USAGE=$(df -h /var/lib/headscale 2>/dev/null | tail -1 | awk '{print $5}' | sed 's/%//')
-
-        if [ -n "$USAGE" ] && [ "$USAGE" -lt ${DISK_WARNING_THRESHOLD_PCT} ]; then
-          REPORT="${REPORT}✓ Disk usage: ${USAGE}%\n"
-        elif [ -n "$USAGE" ]; then
-          REPORT="${REPORT}⚠ Disk usage: ${USAGE}% (cleanup recommended)\n"
-          HEALTH_STATUS=1
-        fi
-      }
-
-      # Run all checks
-      check_service headscale
-      check_service caddy
-      check_service fail2ban
-      check_port 8080 "Headscale API"
-      check_port 443 "HTTPS"
-      check_api_endpoint
-      check_cert_expiry
-      check_api_key_expiry
-      check_disk_space
-
-      # Output report
-      echo -e "=========================================="
-      echo -e "  Health Check Report - $(date)"
-      echo -e "=========================================="
-      echo -e "$REPORT"
-
-      if [ $HEALTH_STATUS -eq 0 ]; then
-        echo -e "Status: HEALTHY ✓"
-      else
-        echo -e "Status: DEGRADED ✗"
-      fi
-
-      exit $HEALTH_STATUS
+      # Populated during setup:
+      # $(git rev-parse --show-toplevel)/write_files/usr/local/bin/headscale-healthcheck
 
   # =========================================================================
   # Health Check Systemd Service
@@ -1578,16 +215,8 @@ write_files:
   - path: /etc/systemd/system/headscale-healthcheck.service
     permissions: "0644"
     content: |
-      [Unit]
-      Description=Headscale Health Check
-      After=headscale.service caddy.service
-
-      [Service]
-      Type=oneshot
-      ExecStart=/usr/local/bin/headscale-healthcheck
-      StandardOutput=journal
-      StandardError=journal
-      SyslogIdentifier=headscale-healthcheck
+      # Populated during setup:
+      # $(git rev-parse --show-toplevel)/write_files/etc/systemd/system/headscale-healthcheck.service
 
   # =========================================================================
   # Health Check Systemd Timer (runs every 5 minutes)
@@ -1595,16 +224,8 @@ write_files:
   - path: /etc/systemd/system/headscale-healthcheck.timer
     permissions: "0644"
     content: |
-      [Unit]
-      Description=Run Headscale Health Check every 5 minutes
-
-      [Timer]
-      OnBootSec=5min
-      OnUnitActiveSec=5min
-      AccuracySec=1min
-
-      [Install]
-      WantedBy=timers.target
+      # Populated during setup:
+      # $(git rev-parse --show-toplevel)/write_files/etc/systemd/system/headscale-healthcheck.timer
 
   # =========================================================================
   # Logrotate Configuration (prevents log files from growing indefinitely)
@@ -1612,19 +233,8 @@ write_files:
   - path: /etc/logrotate.d/headscale
     permissions: "0644"
     content: |
-      /var/log/headscale/*.log {
-          daily
-          rotate 7
-          compress
-          delaycompress
-          missingok
-          notifempty
-          create 0640 headscale headscale
-          sharedscripts
-          postrotate
-              systemctl kill -s HUP headscale.service 2>/dev/null || true
-          endscript
-      }
+      # Populated during setup:
+      # $(git rev-parse --show-toplevel)/write_files/etc/logrotate.d/headscale
 
   # =========================================================================
   # msmtp Configuration (SMTP relay via M365 App Password)
@@ -1632,24 +242,8 @@ write_files:
   - path: /etc/msmtprc
     permissions: "0600"
     content: |
-      # msmtp configuration for M365 SMTP relay
-      # Configure with: sudo msmtp-config
-      
-      defaults
-      auth           on
-      tls            on
-      tls_trust_file /etc/ssl/certs/ca-certificates.crt
-      logfile        /var/log/msmtp.log
-      
-      # Microsoft 365 account
-      account        m365
-      host           smtp.office365.com
-      port           587
-      from           SMTP_FROM_EMAIL
-      user           SMTP_USER_EMAIL
-      passwordeval   "cat /etc/msmtp-password"
-      
-      account default : m365
+      # Populated during setup:
+      # $(git rev-parse --show-toplevel)/write_files/etc/msmtprc
 
   # =========================================================================
   # msmtp Configuration Script
@@ -1657,91 +251,8 @@ write_files:
   - path: /usr/local/bin/msmtp-config
     permissions: "0755"
     content: |
-      #!/bin/bash
-      set -e
-
-      # Load shared libraries
-      source /usr/local/lib/headscale-common.sh
-      source /usr/local/lib/headscale-validators.sh
-      source /usr/local/lib/headscale-secrets.sh
-
-      CONFIG_FILE="/etc/msmtprc"
-      PASSWORD_FILE="/etc/msmtp-password"
-      ALIASES_FILE="/etc/aliases"
-      CREDSTORE="/etc/credstore.encrypted"
-
-      print_banner "msmtp Email Configuration (M365)"
-      echo "This configures email notifications via Microsoft 365."
-      echo ""
-      echo "Prerequisites:"
-      echo "  1. An M365 account with SMTP enabled"
-      echo "  2. An App Password (if MFA enabled) or regular password"
-      echo ""
-      echo "To create an App Password:"
-      echo "  1. Go to: https://mysignins.microsoft.com/security-info"
-      echo "  2. Click 'Add sign-in method' -> 'App password'"
-      echo "  3. Copy the generated password"
-      echo ""
-      
-      # Get email addresses
-      read -p "Sender email (your M365 email): " SENDER_EMAIL
-      read -p "Recipient email (where alerts go): " RECIPIENT_EMAIL
-      read -p "SMTP username (usually same as sender): " -i "$SENDER_EMAIL" -e SMTP_USER
-      SMTP_USER="${SMTP_USER:-$SENDER_EMAIL}"
-      
-      echo -n "SMTP password or App Password: "
-      read -s SMTP_PASSWORD
-      echo ""
-      
-      # Validate using shared validation library
-      validate_email "$SENDER_EMAIL" || {
-        print_error "Invalid sender email format"
-        exit 1
-      }
-
-      validate_email "$RECIPIENT_EMAIL" || {
-        print_error "Invalid recipient email format"
-        exit 1
-      }
-      
-      # Write password file
-      echo -n "$SMTP_PASSWORD" > "$PASSWORD_FILE"
-      chmod 600 "$PASSWORD_FILE"
-      print_success "Password saved to $PASSWORD_FILE"
-
-      # Encrypt the SMTP password for systemd-creds
-      encrypt_secret_if_supported "$PASSWORD_FILE" "smtp_password"
-
-      # Update msmtprc
-      sed -i "s|^from.*|from           $SENDER_EMAIL|" "$CONFIG_FILE"
-      sed -i "s|^user.*|user           $SMTP_USER|" "$CONFIG_FILE"
-      chmod 600 "$CONFIG_FILE"
-      print_success "msmtp configuration updated"
-      
-      # Configure aliases (system mail -> recipient)
-      cat > "$ALIASES_FILE" << EOF
-      root: $RECIPIENT_EMAIL
-      headscale: $RECIPIENT_EMAIL
-      default: $RECIPIENT_EMAIL
-      EOF
-      print_success "Mail aliases configured"
-      
-      # Test email
-      echo ""
-      read -p "Send test email? [Y/n] " SEND_TEST
-      if [[ ! "$SEND_TEST" =~ ^[Nn]$ ]]; then
-        echo "Sending test email..."
-        HOSTNAME=$(hostname)
-        echo -e "Subject: Headscale VPS - Email Test\n\nThis is a test email from your Headscale VPS ($HOSTNAME).\n\nIf you received this, email notifications are working correctly.\n\nTimestamp: $(date)" | msmtp "$RECIPIENT_EMAIL"
-        if [ $? -eq 0 ]; then
-          print_success "Test email sent to $RECIPIENT_EMAIL"
-        else
-          print_error "Failed to send test email - check /var/log/msmtp.log"
-        fi
-      fi
-      
-      echo ""
-      print_success "Email configuration complete!"
+      # Populated during setup:
+      # $(git rev-parse --show-toplevel)/write_files/usr/local/bin/msmtp-config
 
   # =========================================================================
   # Unattended Upgrades Configuration
@@ -1749,45 +260,14 @@ write_files:
   - path: /etc/apt/apt.conf.d/50unattended-upgrades
     permissions: "0644"
     content: |
-      // Unattended Upgrades Configuration for Headscale VPS
-      // SECURITY ONLY: Restricted to security updates to prevent breaking changes
-
-      Unattended-Upgrade::Allowed-Origins {
-          "${distro_id}:${distro_codename}-security";
-          "${distro_id}ESMApps:${distro_codename}-apps-security";
-          "${distro_id}ESM:${distro_codename}-infra-security";
-      };
-      
-      // Remove unused kernel packages
-      Unattended-Upgrade::Remove-Unused-Kernel-Packages "true";
-      
-      // Remove unused dependencies
-      Unattended-Upgrade::Remove-Unused-Dependencies "true";
-      
-      // Automatic reboot if required (Headscale reconnects gracefully)
-      Unattended-Upgrade::Automatic-Reboot "true";
-      Unattended-Upgrade::Automatic-Reboot-Time "03:00";
-      
-      // Email notification (uses msmtp)
-      Unattended-Upgrade::Mail "root";
-      Unattended-Upgrade::MailReport "always";
-      
-      // Syslog logging
-      Unattended-Upgrade::SyslogEnable "true";
-      Unattended-Upgrade::SyslogFacility "daemon";
-      
-      // Run Headscale/Headplane update after OS packages
-      Unattended-Upgrade::Post-Invoke {
-          "/usr/local/bin/headscale-update --unattended || true";
-      };
+      // Populated during setup:
+      // $(git rev-parse --show-toplevel)/write_files/etc/apt/apt.conf.d/50unattended-upgrades
 
   - path: /etc/apt/apt.conf.d/20auto-upgrades
     permissions: "0644"
     content: |
-      APT::Periodic::Update-Package-Lists "1";
-      APT::Periodic::Unattended-Upgrade "1";
-      APT::Periodic::Download-Upgradeable-Packages "1";
-      APT::Periodic::AutocleanInterval "7";
+      // Populated during setup:
+      // $(git rev-parse --show-toplevel)/write_files/etc/apt/apt.conf.d/20auto-upgrades
 
   # =========================================================================
   # Headscale/Headplane Update Script (GitHub Releases)
@@ -1795,236 +275,8 @@ write_files:
   - path: /usr/local/bin/headscale-update
     permissions: "0755"
     content: |
-      #!/bin/bash
-      #
-      # Headscale and Headplane Update Script
-      # Checks GitHub releases and updates if newer version available
-      # Filters out pre-releases and drafts
-      #
-      
-      set -e
-      
-      LOGFILE="/var/log/headscale/updates.log"
-      UNATTENDED=false
-      SEND_EMAIL=true
-      
-      # Parse arguments
-      while [[ $# -gt 0 ]]; do
-        case $1 in
-          --unattended) UNATTENDED=true; shift ;;
-          --no-email) SEND_EMAIL=false; shift ;;
-          *) shift ;;
-        esac
-      done
-      
-      log() {
-        echo "$(date '+%Y-%m-%d %H:%M:%S') $1" | tee -a "$LOGFILE"
-      }
-      
-      get_installed_headscale_version() {
-        headscale version 2>/dev/null | grep -oP 'v\d+\.\d+\.\d+' | head -1 || echo "unknown"
-      }
-      
-      get_installed_headplane_version() {
-        if [ -f /opt/headplane/package.json ]; then
-          grep -oP '"version":\s*"\K[^"]+' /opt/headplane/package.json || echo "unknown"
-        else
-          echo "not-installed"
-        fi
-      }
-      
-      get_latest_github_release() {
-        local repo="$1"
-        # Get latest release, excluding pre-releases and drafts
-        curl -s "https://api.github.com/repos/${repo}/releases" | \
-          jq -r '[.[] | select(.prerelease == false and .draft == false)][0].tag_name' || echo ""
-      }
-      
-      update_headscale() {
-        local current="$1"
-        local latest="$2"
-
-        log "Updating Headscale: $current -> $latest"
-
-        # Download new version with checksum verification
-        local version="${latest#v}"
-        local HS_DEB="headscale_${version}_linux_amd64.deb"
-        local HS_URL="https://github.com/juanfont/headscale/releases/download/${latest}/${HS_DEB}"
-
-        wget -q "$HS_URL" -O /tmp/headscale.deb
-
-        # Fetch and verify checksum
-        local CHECKSUMS_URL="https://github.com/juanfont/headscale/releases/download/${latest}/headscale_${version}_checksums.txt"
-        wget -q "$CHECKSUMS_URL" -O /tmp/headscale_checksums.txt
-
-        local EXPECTED_CHECKSUM=$(grep "$HS_DEB" /tmp/headscale_checksums.txt | awk '{print $1}')
-        if [ -z "$EXPECTED_CHECKSUM" ]; then
-          log "ERROR: Could not find checksum for $HS_DEB"
-          rm -f /tmp/headscale.deb /tmp/headscale_checksums.txt
-          return 1
-        fi
-
-        echo "${EXPECTED_CHECKSUM}  /tmp/headscale.deb" | sha256sum -c - || {
-          log "ERROR: Headscale checksum verification failed!"
-          rm -f /tmp/headscale.deb /tmp/headscale_checksums.txt
-          return 1
-        }
-
-        log "Checksum verified: OK"
-        rm -f /tmp/headscale_checksums.txt
-
-        # Install
-        dpkg -i /tmp/headscale.deb || apt-get install -f -y
-        rm /tmp/headscale.deb
-        
-        # Update symlink if needed
-        if [ -f /usr/bin/headscale ] && [ ! -f /usr/local/bin/headscale ]; then
-          ln -sf /usr/bin/headscale /usr/local/bin/headscale
-        fi
-        
-        # Restart service
-        systemctl restart headscale
-        
-        log "Headscale updated successfully"
-        return 0
-      }
-      
-      update_headplane() {
-        local current="$1"
-        local latest="$2"
-        
-        log "Updating Headplane: $current -> $latest"
-        
-        # Load nvm
-        export NVM_DIR="/opt/nvm"
-        [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
-        
-        cd /opt/headplane
-        
-        # Fetch and checkout new version
-        git fetch --all --tags
-        git checkout "${latest}"
-        
-        # Rebuild
-        pnpm install
-
-        # Build WASM module for SSH functionality (required for v0.6.1+)
-        export GOPATH=/tmp/go
-        export GOMODCACHE=/tmp/go/pkg/mod
-        cat "$(go env GOROOT)/lib/wasm/wasm_exec.js" >> app/wasm_exec.js
-        GOOS=js GOARCH=wasm go build -o app/hp_ssh.wasm ./cmd/hp_ssh
-
-        # Build Node.js application
-        pnpm build
-        
-        # Fix ownership
-        chown -R headscale:headscale /opt/headplane
-        
-        # Restart service
-        systemctl restart headplane
-        
-        log "Headplane updated successfully"
-        return 0
-      }
-      
-      send_update_report() {
-        local subject="$1"
-        local body="$2"
-        
-        if [ "$SEND_EMAIL" = true ] && [ -f /etc/msmtp-password ]; then
-          echo -e "Subject: $subject\n\n$body" | msmtp root
-        fi
-      }
-      
-      main() {
-        log "=========================================="
-        log "Starting update check"
-        log "=========================================="
-
-        # Load version configuration
-        if [ -f /etc/headscale/versions.conf ]; then
-          source /etc/headscale/versions.conf
-        fi
-
-        REPORT=""
-        UPDATES_PERFORMED=false
-        ERRORS=""
-
-        # Check Headscale
-        CURRENT_HS=$(get_installed_headscale_version)
-
-        # Use pinned version if set, otherwise get latest
-        if [ -n "${HEADSCALE_VERSION:-}" ]; then
-          LATEST_HS="v${HEADSCALE_VERSION}"
-          log "Using pinned Headscale version: $LATEST_HS"
-        else
-          LATEST_HS=$(get_latest_github_release "juanfont/headscale")
-          log "Using latest Headscale version from GitHub"
-        fi
-
-        log "Headscale: installed=$CURRENT_HS, target=$LATEST_HS"
-        
-        if [ -n "$LATEST_HS" ] && [ "$CURRENT_HS" != "$LATEST_HS" ] && [ "$CURRENT_HS" != "unknown" ]; then
-          if update_headscale "$CURRENT_HS" "$LATEST_HS"; then
-            REPORT="${REPORT}Headscale: $CURRENT_HS -> $LATEST_HS [OK]\n"
-            UPDATES_PERFORMED=true
-          else
-            REPORT="${REPORT}Headscale: $CURRENT_HS -> $LATEST_HS [FAILED]\n"
-            ERRORS="${ERRORS}Headscale update failed\n"
-          fi
-        else
-          REPORT="${REPORT}Headscale: $CURRENT_HS [up-to-date]\n"
-        fi
-        
-        # Check Headplane (only if installed)
-        if [ -d /opt/headplane ]; then
-          CURRENT_HP=$(get_installed_headplane_version)
-
-          # Use pinned version if set, otherwise get latest
-          if [ -n "${HEADPLANE_VERSION:-}" ]; then
-            LATEST_HP="${HEADPLANE_VERSION}"
-            log "Using pinned Headplane version: $LATEST_HP"
-          else
-            LATEST_HP=$(get_latest_github_release "tale/headplane")
-            log "Using latest Headplane version from GitHub"
-          fi
-
-          log "Headplane: installed=v$CURRENT_HP, target=$LATEST_HP"
-          
-          if [ -n "$LATEST_HP" ] && [ "v$CURRENT_HP" != "$LATEST_HP" ] && [ "$CURRENT_HP" != "unknown" ]; then
-            if update_headplane "$CURRENT_HP" "$LATEST_HP"; then
-              REPORT="${REPORT}Headplane: v$CURRENT_HP -> $LATEST_HP [OK]\n"
-              UPDATES_PERFORMED=true
-            else
-              REPORT="${REPORT}Headplane: v$CURRENT_HP -> $LATEST_HP [FAILED]\n"
-              ERRORS="${ERRORS}Headplane update failed\n"
-            fi
-          else
-            REPORT="${REPORT}Headplane: v$CURRENT_HP [up-to-date]\n"
-          fi
-        fi
-        
-        log "Update check complete"
-        
-        # Send email report if updates were performed or errors occurred
-        if [ "$UPDATES_PERFORMED" = true ] || [ -n "$ERRORS" ]; then
-          HOSTNAME=$(hostname)
-          SUBJECT="Headscale VPS ($HOSTNAME) - Update Report"
-          BODY="Headscale VPS Update Report\n"
-          BODY="${BODY}============================\n"
-          BODY="${BODY}Host: $HOSTNAME\n"
-          BODY="${BODY}Time: $(date)\n\n"
-          BODY="${BODY}Updates:\n$REPORT\n"
-          
-          if [ -n "$ERRORS" ]; then
-            BODY="${BODY}Errors:\n$ERRORS\n"
-          fi
-          
-          send_update_report "$SUBJECT" "$BODY"
-        fi
-      }
-      
-      main "$@"
+      # Populated during setup:
+      # $(git rev-parse --show-toplevel)/write_files/usr/local/bin/headscale-update
 
   # =========================================================================
   # Fail2ban Email Action (using msmtp)
@@ -2032,19 +284,8 @@ write_files:
   - path: /etc/fail2ban/action.d/msmtp-mail.conf
     permissions: "0644"
     content: |
-      # Fail2ban action to send email via msmtp
-      
-      [Definition]
-      actionstart = 
-      actionstop = 
-      actioncheck = 
-      
-      actionban = printf "Subject: [Fail2ban] <name>: Banned <ip>\n\nFail2ban has banned an IP address.\n\nJail: <name>\nIP: <ip>\nTime: $(date)\nHost: $(hostname)\n\nThis IP has been banned for <bantime> seconds after <failures> failures.\n\nLog excerpt:\n<matches>" | /usr/bin/msmtp root
-      
-      actionunban = 
-      
-      [Init]
-      name = default
+      # Populated during setup:
+      # $(git rev-parse --show-toplevel)/write_files/etc/fail2ban/action.d/msmtp-mail.conf
 
   # =========================================================================
   # Fail2ban Configuration (static - no templating needed)
@@ -2054,81 +295,43 @@ write_files:
   - path: /etc/fail2ban/jail.d/sshd.conf
     permissions: "0644"
     content: |
-      [sshd]
-      enabled = true
-      port = ssh
-      filter = sshd
-      logpath = /var/log/auth.log
-      maxretry = 4
-      findtime = 10m
-      bantime = 24h
-      action = %(action_)s
-               msmtp-mail[name=SSH]
+      # Populated during setup:
+      # $(git rev-parse --show-toplevel)/write_files/etc/fail2ban/jail.d/sshd.conf
 
   # Caddy OIDC filter
   - path: /etc/fail2ban/filter.d/caddy-oidc.conf
     permissions: "0644"
     content: |
-      [Definition]
-      # Match 401 Unauthorized responses on OIDC/auth endpoints
-      # Flexible patterns to handle varying JSON field order from Caddy
-      failregex = ^.*"client_ip"\s*:\s*"<HOST>".*"status"\s*:\s*401.*"/(?:oidc|admin/oidc|admin/auth)/.*$
-                  ^.*"status"\s*:\s*401.*"client_ip"\s*:\s*"<HOST>".*"/(?:oidc|admin/oidc|admin/auth)/.*$
-      ignoreregex =
+      # Populated during setup:
+      # $(git rev-parse --show-toplevel)/write_files/etc/fail2ban/filter.d/caddy-oidc.conf
 
   # Caddy OIDC jail
   - path: /etc/fail2ban/jail.d/caddy-oidc.conf
     permissions: "0644"
     content: |
-      [caddy-oidc]
-      enabled = true
-      filter = caddy-oidc
-      port = http,https
-      logpath = /var/log/caddy/access.log
-      maxretry = 5
-      findtime = 10m
-      bantime = 12h
-      action = %(action_)s
-               msmtp-mail[name=Caddy-OIDC]
+      # Populated during setup:
+      # $(git rev-parse --show-toplevel)/write_files/etc/fail2ban/jail.d/caddy-oidc.conf
 
   # Headscale auth key filter
   - path: /etc/fail2ban/filter.d/headscale-authkey.conf
     permissions: "0644"
     content: |
-      [Definition]
-      # Match Headscale pre-auth key failures
-      # Log format: "invalid pre auth key" or "authkey expired/invalid"
-      failregex = ^.*(?:invalid pre auth key|authkey expired|authkey already used|invalid authkey).*$
-      ignoreregex =
+      # Populated during setup:
+      # $(git rev-parse --show-toplevel)/write_files/etc/fail2ban/filter.d/headscale-authkey.conf
 
   # Headscale auth key jail
   - path: /etc/fail2ban/jail.d/headscale.conf
     permissions: "0644"
     content: |
-      [headscale-authkey]
-      enabled = true
-      filter = headscale-authkey
-      port = http,https
-      logpath = /var/log/headscale/headscale.log
-      maxretry = 5
-      findtime = 10m
-      bantime = 12h
-      action = %(action_)s
-               msmtp-mail[name=Headscale-AuthKey]
+      # Populated during setup:
+      # $(git rev-parse --show-toplevel)/write_files/etc/fail2ban/jail.d/headscale.conf
 
   # Recidive jail - longer bans for repeat offenders
   - path: /etc/fail2ban/jail.d/recidive.conf
     permissions: "0644"
     content: |
-      [recidive]
-      enabled = true
-      filter = recidive
-      logpath = /var/log/fail2ban.log
-      action = %(action_)s
-               msmtp-mail[name=Recidive]
-      bantime = 1w
-      findtime = 1d
-      maxretry = 3
+      # Populated during setup:
+      # $(git rev-parse --show-toplevel)/write_files/etc/fail2ban
 
   # =========================================================================
   # Auditd Rules (config and secret monitoring)
@@ -2136,14 +339,8 @@ write_files:
   - path: /etc/audit/rules.d/headscale.rules
     permissions: "0644"
     content: |
-      # Monitor config changes
-      -w /etc/headscale/ -p wa -k headscale_config
-      -w /etc/headplane/ -p wa -k headplane_config
-      -w /etc/caddy/ -p wa -k caddy_config
-
-      # Monitor secret access
-      -w /var/lib/headscale/api_key -p r -k api_key_access
-      -w /var/lib/headscale/oidc_client_secret -p r -k oidc_secret_access
+      # Populated during setup:
+      # $(git rev-parse --show-toplevel)/write_files/etc/audit/rules.d/headscale.rules
 
   # =========================================================================
   # Setup Script (runs once during cloud-init)
@@ -2151,225 +348,8 @@ write_files:
   - path: /opt/setup-headscale.sh
     permissions: "0755"
     content: |
-      #!/bin/bash
-      set -e
-      
-      # Track setup progress for cleanup on failure
-      SETUP_STAGE="init"
-      
-      cleanup_on_failure() {
-        echo ""
-        echo "========================================="
-        echo "  Setup failed at stage: $SETUP_STAGE"
-        echo "========================================="
-        echo ""
-        echo "Attempting to clean up partial installation..."
-        
-        case "$SETUP_STAGE" in
-          firewall)
-            ufw --force disable 2>/dev/null || true
-            ;;
-          caddy)
-            apt-get remove -y caddy 2>/dev/null || true
-            rm -f /etc/apt/sources.list.d/caddy-stable.list
-            rm -f /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-            ;;
-          headscale)
-            dpkg --remove headscale 2>/dev/null || true
-            ;;
-        esac
-        
-        echo ""
-        echo "Cleanup complete. Please check the error above and retry."
-        echo "You may need to run 'apt-get update' before retrying."
-        exit 1
-      }
-      
-      trap cleanup_on_failure ERR
-      
-      echo "=========================================="
-      echo "  Headscale + Headplane Setup"
-      echo "  Production-Ready Configuration"
-      echo "=========================================="
-      
-      # Load version configuration if available
-      if [ -f /etc/headscale/versions.conf ]; then
-        source /etc/headscale/versions.conf
-      fi
-      
-      SETUP_STAGE="user"
-      # Create headscale user and group
-      echo "[1/8] Creating headscale user..."
-      if ! id -u headscale > /dev/null 2>&1; then
-        useradd --system --home /var/lib/headscale --shell /usr/sbin/nologin headscale
-      fi
-      
-      SETUP_STAGE="directories"
-      # Create directories
-      echo "[2/8] Creating directories..."
-      mkdir -p /var/lib/headscale
-      mkdir -p /var/lib/headplane
-      mkdir -p /etc/headscale/templates
-      mkdir -p /etc/headplane
-      mkdir -p /var/log/headscale
-      mkdir -p /var/log/caddy
-      mkdir -p /opt/headplane
-      mkdir -p /etc/environment.d
-      
-      # Set ownership (headscale dirs only - caddy not installed yet)
-      chown -R headscale:headscale /var/lib/headscale
-      chown -R headscale:headscale /var/lib/headplane
-      chown -R headscale:headscale /etc/headplane
-      chown -R headscale:headscale /var/log/headscale
-      
-      SETUP_STAGE="caddy"
-      # Install Caddy
-      echo "[3/8] Installing Caddy..."
-
-      # Download and verify Caddy GPG key fingerprint
-      CADDY_GPG_FINGERPRINT="65760C51EDEA2017CEA2CA15155B6D79CA56EA34"
-      TEMP_KEYRING="/tmp/caddy-keyring.gpg"
-
-      curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | \
-        gpg --dearmor -o "$TEMP_KEYRING"
-
-      ACTUAL_FINGERPRINT=$(gpg --no-default-keyring --keyring "$TEMP_KEYRING" --list-keys --with-colons 2>/dev/null | \
-        grep '^fpr' | head -1 | cut -d':' -f10)
-
-      if [ "$ACTUAL_FINGERPRINT" != "$CADDY_GPG_FINGERPRINT" ]; then
-        echo "ERROR: Caddy GPG key fingerprint mismatch!"
-        echo "  Expected: $CADDY_GPG_FINGERPRINT"
-        echo "  Actual:   $ACTUAL_FINGERPRINT"
-        rm -f "$TEMP_KEYRING"
-        exit 1
-      fi
-
-      echo "    GPG fingerprint verified: OK"
-      mv "$TEMP_KEYRING" /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-
-      curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list
-      apt-get update
-      apt-get install -y caddy
-      
-      # Set caddy log ownership (now that caddy user exists)
-      chown -R caddy:caddy /var/log/caddy
-      
-      SETUP_STAGE="headscale"
-      # Install Headscale
-      echo "[4/8] Installing Headscale..."
-      if [ -n "$HEADSCALE_VERSION" ]; then
-        HS_VERSION="$HEADSCALE_VERSION"
-      else
-        HS_VERSION=$(curl -s https://api.github.com/repos/juanfont/headscale/releases/latest | jq -r '.tag_name' | sed 's/v//')
-      fi
-      echo "    Version: ${HS_VERSION}"
-
-      # Download with checksum verification
-      HS_DEB="headscale_${HS_VERSION}_linux_amd64.deb"
-      HS_URL="https://github.com/juanfont/headscale/releases/download/v${HS_VERSION}/${HS_DEB}"
-
-      wget -q "$HS_URL" -O /tmp/headscale.deb
-
-      # Fetch and verify checksum (optional - skip if checksums file doesn't exist)
-      CHECKSUMS_URL="https://github.com/juanfont/headscale/releases/download/v${HS_VERSION}/headscale_${HS_VERSION}_checksums.txt"
-      if wget -q "$CHECKSUMS_URL" -O /tmp/headscale_checksums.txt 2>/dev/null; then
-        EXPECTED_CHECKSUM=$(grep "$HS_DEB" /tmp/headscale_checksums.txt 2>/dev/null | awk '{print $1}')
-        if [ -n "$EXPECTED_CHECKSUM" ]; then
-          echo "${EXPECTED_CHECKSUM}  /tmp/headscale.deb" | sha256sum -c - && {
-            echo "    Checksum verified: OK"
-          } || {
-            echo "WARNING: Headscale checksum verification failed!"
-            echo "Proceeding with installation anyway..."
-          }
-        else
-          echo "    Checksum file found but $HS_DEB not listed - skipping verification"
-        fi
-        rm -f /tmp/headscale_checksums.txt
-      else
-        echo "    Checksums file not available - skipping verification"
-      fi
-
-      # Install
-      dpkg -i /tmp/headscale.deb || apt-get install -f -y
-      rm /tmp/headscale.deb
-      
-      # Symlink headscale binary if needed
-      if [ -f /usr/bin/headscale ] && [ ! -f /usr/local/bin/headscale ]; then
-        ln -sf /usr/bin/headscale /usr/local/bin/headscale
-      fi
-      
-      SETUP_STAGE="secrets"
-      # Generate secrets
-      echo "[5/8] Generating secrets..."
-      
-      # Cookie secret for Headplane
-      openssl rand -base64 24 | tr -d '\n' > /var/lib/headplane/cookie_secret
-      chown headscale:headscale /var/lib/headplane/cookie_secret
-      chmod 600 /var/lib/headplane/cookie_secret
-
-      # Placeholder for OIDC client secret
-      touch /var/lib/headscale/oidc_client_secret
-      chown headscale:headscale /var/lib/headscale/oidc_client_secret
-      chmod 600 /var/lib/headscale/oidc_client_secret
-      
-      SETUP_STAGE="firewall"
-      # Configure firewall
-      echo "[6/8] Configuring firewall..."
-      ufw --force reset
-      ufw default deny incoming
-      ufw default allow outgoing
-      ufw allow ssh
-      ufw allow 80/tcp    # HTTP (Caddy redirect)
-      ufw allow 443/tcp   # HTTPS (Caddy)
-      ufw allow 3478/udp  # STUN (DERP)
-      ufw --force enable
-      
-      SETUP_STAGE="services"
-      # Enable services (but don't start yet - need configuration)
-      echo "[7/10] Enabling services..."
-      systemctl daemon-reload
-      systemctl enable headscale
-      systemctl enable caddy
-      systemctl enable fail2ban
-      systemctl enable headscale-healthcheck.timer
-
-      # Start fail2ban and health check timer (don't need configuration)
-      systemctl start fail2ban
-      systemctl start headscale-healthcheck.timer
-
-      SETUP_STAGE="hardening"
-      # Apply kernel hardening
-      echo "[8/10] Applying kernel hardening..."
-      sysctl --system
-
-      # Restart SSH with hardened config
-      echo "[9/10] Restarting SSH with hardened config..."
-      systemctl restart ssh
-
-      # Enable auditd
-      echo "[10/10] Enabling audit logging..."
-      systemctl enable auditd
-      systemctl start auditd
-
-      # Clear trap - setup successful
-      trap - ERR
-
-      # Final message
-      echo "Setup complete!"
-      echo ""
-      echo "=========================================="
-      echo "  Next Steps"
-      echo "=========================================="
-      echo ""
-      echo "  1. Run the configuration wizard:"
-      echo "     sudo headscale-config"
-      echo ""
-      echo "  2. Verify all services are running:"
-      echo "     systemctl status headscale headplane caddy"
-      echo ""
-      echo "  For Azure AD setup instructions, see:"
-      echo "     https://github.com/anonhostpi/Headscale-VPS/blob/main/AZURE_AD_SETUP.md"
-      echo ""
+      # Populated during setup:
+      # $(git rev-parse --show-toplevel)/write_files/opt/setup-headscale.sh
 
 runcmd:
   - /opt/setup-headscale.sh

@@ -1,0 +1,230 @@
+#!/bin/bash
+#
+# Headscale and Headplane Update Script
+# Checks GitHub releases and updates if newer version available
+# Filters out pre-releases and drafts
+#
+
+set -e
+
+LOGFILE="/var/log/headscale/updates.log"
+UNATTENDED=false
+SEND_EMAIL=true
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --unattended) UNATTENDED=true; shift ;;
+    --no-email) SEND_EMAIL=false; shift ;;
+    *) shift ;;
+  esac
+done
+
+log() {
+  echo "$(date '+%Y-%m-%d %H:%M:%S') $1" | tee -a "$LOGFILE"
+}
+
+get_installed_headscale_version() {
+  headscale version 2>/dev/null | grep -oP 'v\d+\.\d+\.\d+' | head -1 || echo "unknown"
+}
+
+get_installed_headplane_version() {
+  if [ -f /opt/headplane/package.json ]; then
+    grep -oP '"version":\s*"\K[^"]+' /opt/headplane/package.json || echo "unknown"
+  else
+    echo "not-installed"
+  fi
+}
+
+get_latest_github_release() {
+  local repo="$1"
+  # Get latest release, excluding pre-releases and drafts
+  curl -s "https://api.github.com/repos/${repo}/releases" | \
+    jq -r '[.[] | select(.prerelease == false and .draft == false)][0].tag_name' || echo ""
+}
+
+update_headscale() {
+  local current="$1"
+  local latest="$2"
+
+  log "Updating Headscale: $current -> $latest"
+
+  # Download new version with checksum verification
+  local version="${latest#v}"
+  local HS_DEB="headscale_${version}_linux_amd64.deb"
+  local HS_URL="https://github.com/juanfont/headscale/releases/download/${latest}/${HS_DEB}"
+
+  wget -q "$HS_URL" -O /tmp/headscale.deb
+
+  # Fetch and verify checksum
+  local CHECKSUMS_URL="https://github.com/juanfont/headscale/releases/download/${latest}/headscale_${version}_checksums.txt"
+  wget -q "$CHECKSUMS_URL" -O /tmp/headscale_checksums.txt
+
+  local EXPECTED_CHECKSUM=$(grep "$HS_DEB" /tmp/headscale_checksums.txt | awk '{print $1}')
+  if [ -z "$EXPECTED_CHECKSUM" ]; then
+    log "ERROR: Could not find checksum for $HS_DEB"
+    rm -f /tmp/headscale.deb /tmp/headscale_checksums.txt
+    return 1
+  fi
+
+  echo "${EXPECTED_CHECKSUM}  /tmp/headscale.deb" | sha256sum -c - || {
+    log "ERROR: Headscale checksum verification failed!"
+    rm -f /tmp/headscale.deb /tmp/headscale_checksums.txt
+    return 1
+  }
+
+  log "Checksum verified: OK"
+  rm -f /tmp/headscale_checksums.txt
+
+  # Install
+  dpkg -i /tmp/headscale.deb || apt-get install -f -y
+  rm /tmp/headscale.deb
+  
+  # Update symlink if needed
+  if [ -f /usr/bin/headscale ] && [ ! -f /usr/local/bin/headscale ]; then
+    ln -sf /usr/bin/headscale /usr/local/bin/headscale
+  fi
+  
+  # Restart service
+  systemctl restart headscale
+  
+  log "Headscale updated successfully"
+  return 0
+}
+
+update_headplane() {
+  local current="$1"
+  local latest="$2"
+  
+  log "Updating Headplane: $current -> $latest"
+  
+  # Load nvm
+  export NVM_DIR="/opt/nvm"
+  [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+  
+  cd /opt/headplane
+  
+  # Fetch and checkout new version
+  git fetch --all --tags
+  git checkout "${latest}"
+  
+  # Rebuild
+  pnpm install
+
+  # Build WASM module for SSH functionality (required for v0.6.1+)
+  export GOPATH=/tmp/go
+  export GOMODCACHE=/tmp/go/pkg/mod
+  cat "$(go env GOROOT)/lib/wasm/wasm_exec.js" >> app/wasm_exec.js
+  GOOS=js GOARCH=wasm go build -o app/hp_ssh.wasm ./cmd/hp_ssh
+
+  # Build Node.js application
+  pnpm build
+  
+  # Fix ownership
+  chown -R headscale:headscale /opt/headplane
+  
+  # Restart service
+  systemctl restart headplane
+  
+  log "Headplane updated successfully"
+  return 0
+}
+
+send_update_report() {
+  local subject="$1"
+  local body="$2"
+  
+  if [ "$SEND_EMAIL" = true ] && [ -f /etc/msmtp-password ]; then
+    echo -e "Subject: $subject\n\n$body" | msmtp root
+  fi
+}
+
+main() {
+  log "=========================================="
+  log "Starting update check"
+  log "=========================================="
+
+  # Load version configuration
+  if [ -f /etc/headscale/versions.conf ]; then
+    source /etc/headscale/versions.conf
+  fi
+
+  REPORT=""
+  UPDATES_PERFORMED=false
+  ERRORS=""
+
+  # Check Headscale
+  CURRENT_HS=$(get_installed_headscale_version)
+
+  # Use pinned version if set, otherwise get latest
+  if [ -n "${HEADSCALE_VERSION:-}" ]; then
+    LATEST_HS="v${HEADSCALE_VERSION}"
+    log "Using pinned Headscale version: $LATEST_HS"
+  else
+    LATEST_HS=$(get_latest_github_release "juanfont/headscale")
+    log "Using latest Headscale version from GitHub"
+  fi
+
+  log "Headscale: installed=$CURRENT_HS, target=$LATEST_HS"
+  
+  if [ -n "$LATEST_HS" ] && [ "$CURRENT_HS" != "$LATEST_HS" ] && [ "$CURRENT_HS" != "unknown" ]; then
+    if update_headscale "$CURRENT_HS" "$LATEST_HS"; then
+      REPORT="${REPORT}Headscale: $CURRENT_HS -> $LATEST_HS [OK]\n"
+      UPDATES_PERFORMED=true
+    else
+      REPORT="${REPORT}Headscale: $CURRENT_HS -> $LATEST_HS [FAILED]\n"
+      ERRORS="${ERRORS}Headscale update failed\n"
+    fi
+  else
+    REPORT="${REPORT}Headscale: $CURRENT_HS [up-to-date]\n"
+  fi
+  
+  # Check Headplane (only if installed)
+  if [ -d /opt/headplane ]; then
+    CURRENT_HP=$(get_installed_headplane_version)
+
+    # Use pinned version if set, otherwise get latest
+    if [ -n "${HEADPLANE_VERSION:-}" ]; then
+      LATEST_HP="${HEADPLANE_VERSION}"
+      log "Using pinned Headplane version: $LATEST_HP"
+    else
+      LATEST_HP=$(get_latest_github_release "tale/headplane")
+      log "Using latest Headplane version from GitHub"
+    fi
+
+    log "Headplane: installed=v$CURRENT_HP, target=$LATEST_HP"
+    
+    if [ -n "$LATEST_HP" ] && [ "v$CURRENT_HP" != "$LATEST_HP" ] && [ "$CURRENT_HP" != "unknown" ]; then
+      if update_headplane "$CURRENT_HP" "$LATEST_HP"; then
+        REPORT="${REPORT}Headplane: v$CURRENT_HP -> $LATEST_HP [OK]\n"
+        UPDATES_PERFORMED=true
+      else
+        REPORT="${REPORT}Headplane: v$CURRENT_HP -> $LATEST_HP [FAILED]\n"
+        ERRORS="${ERRORS}Headplane update failed\n"
+      fi
+    else
+      REPORT="${REPORT}Headplane: v$CURRENT_HP [up-to-date]\n"
+    fi
+  fi
+  
+  log "Update check complete"
+  
+  # Send email report if updates were performed or errors occurred
+  if [ "$UPDATES_PERFORMED" = true ] || [ -n "$ERRORS" ]; then
+    HOSTNAME=$(hostname)
+    SUBJECT="Headscale VPS ($HOSTNAME) - Update Report"
+    BODY="Headscale VPS Update Report\n"
+    BODY="${BODY}============================\n"
+    BODY="${BODY}Host: $HOSTNAME\n"
+    BODY="${BODY}Time: $(date)\n\n"
+    BODY="${BODY}Updates:\n$REPORT\n"
+    
+    if [ -n "$ERRORS" ]; then
+      BODY="${BODY}Errors:\n$ERRORS\n"
+    fi
+    
+    send_update_report "$SUBJECT" "$BODY"
+  fi
+}
+
+main "$@"

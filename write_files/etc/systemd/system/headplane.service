@@ -1,0 +1,52 @@
+[Unit]
+Description=Headplane - Web UI for Headscale
+After=network-online.target headscale.service
+Wants=network-online.target
+Requires=headscale.service
+
+[Service]
+Type=simple
+User=headscale
+Group=headscale
+
+# Load encrypted credentials (automatically decrypted by systemd)
+# Falls back to plaintext files if encrypted credentials don't exist
+LoadCredentialEncrypted=oidc_client_secret:/etc/credstore.encrypted/oidc_client_secret.cred
+LoadCredential=oidc_client_secret:/var/lib/headscale/oidc_client_secret
+LoadCredentialEncrypted=headscale_api_key:/etc/credstore.encrypted/headscale_api_key.cred
+LoadCredential=headscale_api_key:/var/lib/headscale/api_key
+LoadCredentialEncrypted=cookie_secret:/etc/credstore.encrypted/cookie_secret.cred
+LoadCredential=cookie_secret:/var/lib/headplane/cookie_secret
+
+Environment=HEADPLANE_CONFIG_PATH=/etc/headplane/config.yaml
+Environment=NODE_ENV=production
+Environment=NVM_DIR=/opt/nvm
+WorkingDirectory=/opt/headplane
+ExecStart=/opt/nvm/versions/node/v25.2.1/bin/node /opt/headplane/build/server/index.js
+Restart=always
+RestartSec=5
+
+# Hardening
+# NOTE: MemoryDenyWriteExecute is NOT used because Node.js V8 JIT
+# compilation requires write+execute memory pages (W^X exception)
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/headscale /var/lib/headplane /etc/headscale
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+RestrictRealtime=true
+CapabilityBoundingSet=
+SystemCallFilter=@system-service @pkey
+SystemCallArchitectures=native
+PrivateDevices=true
+ProtectClock=true
+ProtectHostname=true
+
+[Install]
+WantedBy=multi-user.target

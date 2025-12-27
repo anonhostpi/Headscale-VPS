@@ -1,0 +1,85 @@
+#!/bin/bash
+set -e
+
+# Load shared libraries
+source /usr/local/lib/headscale-common.sh
+source /usr/local/lib/headscale-validators.sh
+source /usr/local/lib/headscale-secrets.sh
+
+CONFIG_FILE="/etc/msmtprc"
+PASSWORD_FILE="/etc/msmtp-password"
+ALIASES_FILE="/etc/aliases"
+CREDSTORE="/etc/credstore.encrypted"
+
+print_banner "msmtp Email Configuration (M365)"
+echo "This configures email notifications via Microsoft 365."
+echo ""
+echo "Prerequisites:"
+echo "  1. An M365 account with SMTP enabled"
+echo "  2. An App Password (if MFA enabled) or regular password"
+echo ""
+echo "To create an App Password:"
+echo "  1. Go to: https://mysignins.microsoft.com/security-info"
+echo "  2. Click 'Add sign-in method' -> 'App password'"
+echo "  3. Copy the generated password"
+echo ""
+
+# Get email addresses
+read -p "Sender email (your M365 email): " SENDER_EMAIL
+read -p "Recipient email (where alerts go): " RECIPIENT_EMAIL
+read -p "SMTP username (usually same as sender): " -i "$SENDER_EMAIL" -e SMTP_USER
+SMTP_USER="${SMTP_USER:-$SENDER_EMAIL}"
+
+echo -n "SMTP password or App Password: "
+read -s SMTP_PASSWORD
+echo ""
+
+# Validate using shared validation library
+validate_email "$SENDER_EMAIL" || {
+  print_error "Invalid sender email format"
+  exit 1
+}
+
+validate_email "$RECIPIENT_EMAIL" || {
+  print_error "Invalid recipient email format"
+  exit 1
+}
+
+# Write password file
+echo -n "$SMTP_PASSWORD" > "$PASSWORD_FILE"
+chmod 600 "$PASSWORD_FILE"
+print_success "Password saved to $PASSWORD_FILE"
+
+# Encrypt the SMTP password for systemd-creds
+encrypt_secret_if_supported "$PASSWORD_FILE" "smtp_password"
+
+# Update msmtprc
+sed -i "s|^from.*|from           $SENDER_EMAIL|" "$CONFIG_FILE"
+sed -i "s|^user.*|user           $SMTP_USER|" "$CONFIG_FILE"
+chmod 600 "$CONFIG_FILE"
+print_success "msmtp configuration updated"
+
+# Configure aliases (system mail -> recipient)
+cat > "$ALIASES_FILE" << EOF
+root: $RECIPIENT_EMAIL
+headscale: $RECIPIENT_EMAIL
+default: $RECIPIENT_EMAIL
+EOF
+print_success "Mail aliases configured"
+
+# Test email
+echo ""
+read -p "Send test email? [Y/n] " SEND_TEST
+if [[ ! "$SEND_TEST" =~ ^[Nn]$ ]]; then
+  echo "Sending test email..."
+  HOSTNAME=$(hostname)
+  echo -e "Subject: Headscale VPS - Email Test\n\nThis is a test email from your Headscale VPS ($HOSTNAME).\n\nIf you received this, email notifications are working correctly.\n\nTimestamp: $(date)" | msmtp "$RECIPIENT_EMAIL"
+  if [ $? -eq 0 ]; then
+    print_success "Test email sent to $RECIPIENT_EMAIL"
+  else
+    print_error "Failed to send test email - check /var/log/msmtp.log"
+  fi
+fi
+
+echo ""
+print_success "Email configuration complete!"

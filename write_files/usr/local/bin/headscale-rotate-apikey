@@ -1,0 +1,95 @@
+#!/bin/bash
+set -e
+
+# Load shared libraries (headscale-secrets.sh loads constants.conf)
+source /usr/local/lib/headscale-common.sh
+source /usr/local/lib/headscale-secrets.sh
+
+API_KEY_FILE="/var/lib/headscale/api_key"
+API_KEY_EXPIRES="/var/lib/headscale/api_key_expires"
+HEADPLANE_CONFIG="/etc/headplane/config.yaml"
+CREDSTORE="/etc/credstore.encrypted"
+
+echo "Rotating Headscale API key..."
+
+# Ensure headscale is running
+if ! systemctl is-active --quiet headscale; then
+  echo -e "${RED}[ERROR]${NC} Headscale is not running"
+  exit 1
+fi
+
+# Create new API key
+local api_create_output api_create_error
+api_create_output=$(headscale apikeys create --expiration ${API_KEY_EXPIRATION_DAYS}d 2>&1)
+api_create_error=$?
+
+if [ $api_create_error -ne 0 ]; then
+  echo -e "${RED}[ERROR]${NC} Failed to create new API key"
+  echo "  Error details: $api_create_output" >&2
+  exit 1
+fi
+
+NEW_KEY=$(echo "$api_create_output" | tail -1)
+
+if [ -z "$NEW_KEY" ]; then
+  echo -e "${RED}[ERROR]${NC} API key creation returned empty result"
+  echo "  Output: $api_create_output" >&2
+  exit 1
+fi
+
+# Backup old key
+if [ -f "$API_KEY_FILE" ]; then
+  cp "$API_KEY_FILE" "${API_KEY_FILE}.bak"
+fi
+
+# Write new key
+echo -n "$NEW_KEY" > "$API_KEY_FILE"
+chown headscale:headscale "$API_KEY_FILE"
+chmod 600 "$API_KEY_FILE"
+
+# Update expiration date
+date -d "+${API_KEY_EXPIRATION_DAYS} days" +%Y-%m-%d > "$API_KEY_EXPIRES"
+chown headscale:headscale "$API_KEY_EXPIRES"
+chmod 600 "$API_KEY_EXPIRES"
+
+echo -e "${GREEN}[OK]${NC} New API key generated (expires in ${API_KEY_EXPIRATION_DAYS} days)"
+
+# Encrypt the new API key for systemd-creds
+encrypt_secret_if_supported "$API_KEY_FILE" "headscale_api_key"
+
+# Restart Headplane to use new key
+if systemctl is-active --quiet headplane; then
+  systemctl restart headplane
+  echo -e "${GREEN}[OK]${NC} Headplane restarted with new key"
+fi
+
+# Expire old API keys (keeps only the newest)
+echo "Expiring old API keys..."
+local list_output list_error
+list_output=$(headscale apikeys list -o json 2>&1)
+list_error=$?
+
+if [ $list_error -ne 0 ]; then
+  echo -e "${YELLOW}[!!]${NC} Warning: Could not list API keys for cleanup"
+  echo "  Error details: $list_output" >&2
+else
+  echo "$list_output" | \
+    jq -r --arg newkey "$NEW_KEY" '.[] | select(.key != $newkey) | .prefix' | \
+    while read -r prefix; do
+      if [ -n "$prefix" ]; then
+        local expire_output expire_error
+        expire_output=$(headscale apikeys expire --prefix "$prefix" 2>&1)
+        expire_error=$?
+
+        if [ $expire_error -eq 0 ]; then
+          echo -e "${YELLOW}[!!]${NC} Expired old key: $prefix"
+        else
+          echo -e "${YELLOW}[!!]${NC} Warning: Failed to expire key $prefix"
+          echo "  Error details: $expire_output" >&2
+        fi
+      fi
+    done
+fi
+
+echo ""
+echo "Rotation complete. New key expires: $(cat $API_KEY_EXPIRES)"

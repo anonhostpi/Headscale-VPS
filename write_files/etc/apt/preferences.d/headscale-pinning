@@ -1,0 +1,20 @@
+# APT pinning for Headscale VPS dependencies
+# Prevents automatic upgrades of critical packages
+# Pin priority explanation:
+#   990 = prefer this version over others
+#   500 = normal priority
+#   100 = downgrade priority
+#  -1   = never install this version
+
+# Pin Caddy to current installed version
+# To upgrade: change Pin to new version or remove this file
+Package: caddy
+Pin: version *
+Pin-Priority: 990
+
+# Explanation: This pins Caddy to the currently installed version
+# Caddy will not be automatically upgraded by unattended-upgrades
+# To upgrade Caddy:
+#   1. Update this file with new version or remove it
+#   2. Run: apt-get install caddy
+#   3. Test thoroughly before re-adding pin

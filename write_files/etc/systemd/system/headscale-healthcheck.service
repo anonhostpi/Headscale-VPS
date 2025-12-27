@@ -1,0 +1,10 @@
+[Unit]
+Description=Headscale Health Check
+After=headscale.service caddy.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/headscale-healthcheck
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=headscale-healthcheck

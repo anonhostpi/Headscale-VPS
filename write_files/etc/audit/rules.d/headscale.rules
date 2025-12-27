@@ -1,0 +1,8 @@
+# Monitor config changes
+-w /etc/headscale/ -p wa -k headscale_config
+-w /etc/headplane/ -p wa -k headplane_config
+-w /etc/caddy/ -p wa -k caddy_config
+
+# Monitor secret access
+-w /var/lib/headscale/api_key -p r -k api_key_access
+-w /var/lib/headscale/oidc_client_secret -p r -k oidc_secret_access
