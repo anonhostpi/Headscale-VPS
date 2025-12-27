@@ -542,6 +542,35 @@ function Configure-Headscale {
     }
 }
 
+function Configure-Caddy-ForTesting {
+    param(
+        [hashtable]$Options = $ModuleScope.Options
+    )
+
+    Write-Host ""
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host "  Configuring Caddy for Testing" -ForegroundColor Cyan
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host ""
+
+    Write-Host "Reconfiguring Caddy for HTTP (test only)..." -ForegroundColor Yellow
+
+    # For testing with ngrok: change Caddyfile from HTTPS (domain) to HTTP (:80)
+    # ngrok handles TLS termination, so Caddy serves plain HTTP internally
+    # This avoids TLS certificate issues with self-signed certs
+    $escapedDomain = $Options.Domain -replace '\.', '\.'
+    $cmd = "sed -i 's/^${escapedDomain} {$/:80 {/' /etc/caddy/Caddyfile && systemctl restart caddy"
+
+    try {
+        multipass exec $Options.Name -- sudo bash -c $cmd
+        Write-Host "✓ Caddy configured for ngrok testing!" -ForegroundColor Green
+        Write-Host "  Note: Listening on :80 (HTTP) behind ngrok TLS termination" -ForegroundColor DarkGray
+    } catch {
+        Write-Host "✗ Failed to configure Caddy: $_" -ForegroundColor Red
+        throw
+    }
+}
+
 function Configure-Ngrok {
     param(
         [hashtable]$Options = $ModuleScope.Options
@@ -579,9 +608,10 @@ function Start-Ngrok {
     Write-Host "Starting ngrok tunnel in background..." -ForegroundColor Yellow
 
     # Start ngrok in background using nohup - use bash -c to avoid stdin blocking
+    # Forward to HTTP port 80 since Caddy is reconfigured for testing (not HTTPS 443)
     $cmd = (@(
         "pkill ngrok 2>/dev/null || true"
-        "nohup ngrok http --domain=$($Options.Domain) https://localhost:443 > /var/log/ngrok.log 2>&1 &"
+        "nohup ngrok http --domain=$($Options.Domain) http://localhost:80 > /var/log/ngrok.log 2>&1 &"
         "sleep 3"
         "if pgrep -x ngrok > /dev/null"
             "then echo '✓ ngrok tunnel started successfully'"
@@ -595,7 +625,7 @@ function Start-Ngrok {
     try {
         multipass exec $Options.Name -- sudo bash -c $cmd
         Write-Host "✓ Ngrok tunnel running in background!" -ForegroundColor Green
-        Write-Host "  Tunnel: https://$($Options.Domain) → VM:443" -ForegroundColor Cyan
+        Write-Host "  Tunnel: https://$($Options.Domain) → VM:80" -ForegroundColor Cyan
         Write-Host "  View logs: multipass exec '$($Options.Name)' -- tail -f /var/log/ngrok.log" -ForegroundColor White
     } catch {
         Write-Host "✗ Failed to start ngrok tunnel: $_" -ForegroundColor Red
@@ -760,6 +790,9 @@ See TESTING.md for full documentation.
         & {
             # Configure Headscale after cloud-init completes
             Configure-Headscale
+
+            # Configure Caddy for testing (prevents ACME attempts behind ngrok)
+            Configure-Caddy-ForTesting
 
             # Install ngrok after configuration
             Install-Ngrok
