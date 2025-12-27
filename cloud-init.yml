@@ -1627,7 +1627,7 @@ write_files:
       }
 
   # =========================================================================
-  # msmtp Configuration (SMTP relay via M365 OAuth2)
+  # msmtp Configuration (SMTP relay via M365 App Password)
   # =========================================================================
   - path: /etc/msmtprc
     permissions: "0600"
