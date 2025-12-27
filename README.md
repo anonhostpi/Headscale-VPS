@@ -443,8 +443,6 @@ This project follows a technical debt reduction plan with 6 phases:
 - ✅ Phase 5: Code Organization (in progress)
 - ⏳ Phase 6: Documentation & Validation
 
-See `C:\Users\smart\.claude\plans\joyful-wondering-lemon.md` for the complete plan.
-
 ## License
 
 This configuration is provided as-is for self-hosting Headscale. Headscale and Headplane are separate projects with their own licenses.
