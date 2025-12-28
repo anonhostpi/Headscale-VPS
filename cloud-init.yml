@@ -27,9 +27,9 @@ bootcmd:
     echo "Installing configuration files..."
 
     while IFS= read -r line; do
-      if echo "$line" | grep -q "^  - path:"; then
+      if echo "$line" | grep -q "^- path:"; then
         current_path=$(echo "$line" | sed 's/.*path: //' | tr -d '"')
-      elif echo "$line" | grep -q "^    permissions:"; then
+      elif echo "$line" | grep -q "^  permissions:"; then
         current_perms=$(echo "$line" | sed 's/.*permissions: //' | tr -d '"')
 
         source_file="write_files${current_path}"
