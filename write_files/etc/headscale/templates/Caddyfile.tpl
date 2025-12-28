@@ -62,10 +62,8 @@ ${HEADSCALE_DOMAIN} {
     }
     
     # Root redirects to Headplane admin
-    handle {
-        redir /admin permanent
-    }
-    
+    redir / /admin permanent
+
     # Structured logging for fail2ban
     log {
         output file /var/log/caddy/access.log {
