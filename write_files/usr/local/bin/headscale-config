@@ -47,6 +47,34 @@ prompt_value() {
   fi
 }
 
+# Resolve domain to IP address
+resolve_domain_ip() {
+  local domain="$1"
+  local ip
+
+  # Try nslookup first (commonly available)
+  if [ -z "$ip" ] && command -v nslookup &>/dev/null; then
+    ip=$(nslookup "$domain" 2>/dev/null | awk '/^Address: / {print $2}' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
+  fi
+
+  # Try dig
+  if [ -z "$ip" ] && command -v dig &>/dev/null; then
+    ip=$(dig +short "$domain" A | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
+  fi
+
+  # Fall back to getent
+  if [ -z "$ip" ] && command -v getent &>/dev/null; then
+    ip=$(getent ahosts "$domain" 2>/dev/null | awk '/STREAM/ {print $1; exit}')
+  fi
+
+  # Last resort: use host command
+  if [ -z "$ip" ] && command -v host &>/dev/null; then
+    ip=$(host -t A "$domain" 2>/dev/null | awk '/has address/ {print $4; exit}')
+  fi
+
+  echo "$ip"
+}
+
 # Validate all inputs (using shared validation library)
 validate_inputs() {
   local valid=true
@@ -63,6 +91,15 @@ validate_inputs() {
   if [ -z "$AZURE_CLIENT_SECRET" ]; then
     print_error "Azure Client Secret cannot be empty"
     valid=false
+  fi
+
+  # Resolve domain IP for extra_records
+  HEADSCALE_IP=$(resolve_domain_ip "$HEADSCALE_DOMAIN")
+  if [ -z "$HEADSCALE_IP" ]; then
+    print_error "Could not resolve IP for domain: $HEADSCALE_DOMAIN"
+    valid=false
+  else
+    print_success "Resolved $HEADSCALE_DOMAIN to $HEADSCALE_IP"
   fi
 
   if [ "$valid" = false ]; then
@@ -185,13 +222,14 @@ process_templates() {
   
   # Export variables for envsubst
   export HEADSCALE_DOMAIN
+  export HEADSCALE_IP
   export AZURE_TENANT_ID
   export AZURE_CLIENT_ID
   export AZURE_CLIENT_SECRET
   export ALLOWED_EMAIL
 
   # Process each template
-  envsubst '${HEADSCALE_DOMAIN} ${AZURE_TENANT_ID} ${AZURE_CLIENT_ID} ${ALLOWED_EMAIL}' \
+  envsubst '${HEADSCALE_DOMAIN} ${HEADSCALE_IP} ${AZURE_TENANT_ID} ${AZURE_CLIENT_ID} ${ALLOWED_EMAIL}' \
     < "$TEMPLATES_DIR/headscale.yaml.tpl" \
     > /etc/headscale/config.yaml
   chown headscale:headscale /etc/headscale/config.yaml

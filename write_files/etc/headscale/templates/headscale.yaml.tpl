@@ -50,7 +50,10 @@ dns:
       - 8.8.8.8
     split: {}
   search_domains: []
-  extra_records: []
+  extra_records:
+    - name: ${HEADSCALE_DOMAIN}
+      type: A
+      value: ${HEADSCALE_IP}
 
 # Azure AD OIDC Configuration
 oidc:
