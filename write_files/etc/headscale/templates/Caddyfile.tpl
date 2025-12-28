@@ -7,17 +7,23 @@ ${HEADSCALE_DOMAIN} {
     
     # Headplane admin UI and auth
     handle /admin* {
-        reverse_proxy 127.0.0.1:3000
+        reverse_proxy 127.0.0.1:3000 {
+            header_up X-Forwarded-Proto https
+        }
     }
-    
+
     # Headplane auth callback
     handle /auth/* {
-        reverse_proxy 127.0.0.1:3000
+        reverse_proxy 127.0.0.1:3000 {
+            header_up X-Forwarded-Proto https
+        }
     }
-    
+
     # Headscale OIDC endpoints
     handle /oidc/* {
-        reverse_proxy 127.0.0.1:8080
+        reverse_proxy 127.0.0.1:8080 {
+            header_up X-Forwarded-Proto https
+        }
     }
     
     # Headscale API
