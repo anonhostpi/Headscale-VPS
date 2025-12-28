@@ -285,7 +285,7 @@ function Get-ConfigValue {
 }
 
 # Get merged configuration with proper priority:
-# CLI Options (highest) → JSON config (primary fallback) → Hardcoded defaults (secondary fallback)
+# CLI Options (highest) -> JSON config (primary fallback) -> Hardcoded defaults (secondary fallback)
 function Get-Config {
     param(
         [hashtable]$CliOptions,
@@ -334,7 +334,7 @@ function Get-Config {
                 $config[$property.Name] = $property.Value
             }
         } catch {
-            Write-Host "⚠ Failed to parse config file, using hardcoded defaults" -ForegroundColor Yellow
+            Write-Host "WARNING: Failed to parse config file, using hardcoded defaults" -ForegroundColor Yellow
         }
     }
 
@@ -431,22 +431,22 @@ function Test-Prerequisites {
     # Check if multipass is installed
     try {
         $multipassVersion = multipass version
-        Write-Host "✓ Multipass installed: '$($multipassVersion[0])'" -ForegroundColor Green
+        Write-Host "OK: Multipass installed: '$($multipassVersion[0])'" -ForegroundColor Green
     } catch {
-        Write-Host "✗ Multipass is not installed" -ForegroundColor Red
+        Write-Host "ERROR: Multipass is not installed" -ForegroundColor Red
         Write-Host "  Install from: https://multipass.run/install" -ForegroundColor Yellow
         throw "Multipass is not installed"
     }
 
     # Note: ngrok will be installed inside the VM, not required on host
-    Write-Host "ℹ ngrok will be installed inside the VM after deployment" -ForegroundColor Cyan
+    Write-Host "INFO: ngrok will be installed inside the VM after deployment" -ForegroundColor Cyan
 
     # Check if cloud-init.yml exists
     if (-not (Test-Path ".\cloud-init.yml")) {
-        Write-Host "✗ cloud-init.yml not found in current directory" -ForegroundColor Red
+        Write-Host "ERROR: cloud-init.yml not found in current directory" -ForegroundColor Red
         throw "cloud-init.yml not found"
     }
-    Write-Host "✓ cloud-init.yml found" -ForegroundColor Green
+    Write-Host "OK: cloud-init.yml found" -ForegroundColor Green
 
     Write-Host ""
 }
@@ -503,9 +503,9 @@ function Start-MultipassVM {
             --network $Options.Network `
             24.04
 
-        Write-Host "✓ VM launched successfully!" -ForegroundColor Green
+        Write-Host "OK: VM launched successfully!" -ForegroundColor Green
     } catch {
-        Write-Host "✗ Failed to launch VM: $_" -ForegroundColor Red
+        Write-Host "ERROR: Failed to launch VM: $_" -ForegroundColor Red
         throw "Failed to launch VM"
     }
 
@@ -515,10 +515,10 @@ function Start-MultipassVM {
     $ipMatch = $vmInfo | Select-String "IPv4:\s+(\d+\.\d+\.\d+\.\d+)"
     if ($ipMatch) {
         $vmIP = $ipMatch.Matches.Groups[1].Value
-        Write-Host "✓ VM IP: $vmIP" -ForegroundColor Green
+        Write-Host "OK: VM IP: $vmIP" -ForegroundColor Green
         return $vmIP
     } else {
-        Write-Host "⚠ Could not determine VM IP" -ForegroundColor Yellow
+        Write-Host "WARNING: Could not determine VM IP" -ForegroundColor Yellow
         return $null
     }
 }
@@ -537,7 +537,7 @@ function Watch-Deployment {
     Write-Host "Waiting for cloud-init to complete..." -ForegroundColor Yellow
 
     multipass exec $Options.Name -- cloud-init status --wait
-    Write-Host "✓ Cloud-init completed!" -ForegroundColor Green
+    Write-Host "OK: Cloud-init completed!" -ForegroundColor Green
 }
 
 #endregion
@@ -559,21 +559,14 @@ function Configure-Headscale {
 
     # Call the existing headscale-config script with environment variables
     # Use bash -c to avoid stdin issues
-    $cmd = (@(
-        "export HEADSCALE_DOMAIN='$($Options.Domain)'"
-        "export AZURE_TENANT_ID='$($Options.AzureTenantID)'"
-        "export AZURE_CLIENT_ID='$($Options.AzureClientID)'"
-        "export AZURE_CLIENT_SECRET='$($Options.AzureClientSecret)'"
-        "export ALLOWED_EMAIL='$($Options.AzureAllowedEmail)'"
-        "/usr/local/bin/headscale-config"
-    ) -join " && ")
+    $cmd = "export HEADSCALE_DOMAIN='$($Options.Domain)'; export AZURE_TENANT_ID='$($Options.AzureTenantID)'; export AZURE_CLIENT_ID='$($Options.AzureClientID)'; export AZURE_CLIENT_SECRET='$($Options.AzureClientSecret)'; export ALLOWED_EMAIL='$($Options.AzureAllowedEmail)'; /usr/local/bin/headscale-config"
 
     try {
         multipass exec $Options.Name -- sudo bash -c $cmd
 
-        Write-Host "✓ Configuration applied successfully!" -ForegroundColor Green
+        Write-Host "OK: Configuration applied successfully!" -ForegroundColor Green
     } catch {
-        Write-Host "✗ Failed to apply configuration: $_" -ForegroundColor Red
+        Write-Host "ERROR: Failed to apply configuration: $_" -ForegroundColor Red
         throw
     }
 }
@@ -595,14 +588,14 @@ function Configure-Caddy-ForTesting {
     # ngrok handles TLS termination, so Caddy serves plain HTTP internally
     # This avoids TLS certificate issues with self-signed certs
     $escapedDomain = $Options.Domain -replace '\.', '\.'
-    $cmd = "sed -i 's/^${escapedDomain} {$/:80 {/' /etc/caddy/Caddyfile && systemctl restart caddy"
+    $cmd = "sed -i 's/^$escapedDomain {`$/:80 {/' /etc/caddy/Caddyfile; systemctl restart caddy"
 
     try {
         multipass exec $Options.Name -- sudo bash -c $cmd
-        Write-Host "✓ Caddy configured for ngrok testing!" -ForegroundColor Green
+        Write-Host "OK: Caddy configured for ngrok testing!" -ForegroundColor Green
         Write-Host "  Note: Listening on :80 (HTTP) behind ngrok TLS termination" -ForegroundColor DarkGray
     } catch {
-        Write-Host "✗ Failed to configure Caddy: $_" -ForegroundColor Red
+        Write-Host "ERROR: Failed to configure Caddy: $_" -ForegroundColor Red
         throw
     }
 }
@@ -620,7 +613,7 @@ function Configure-Msmtp {
         Write-Host "  Email Notifications" -ForegroundColor Cyan
         Write-Host "========================================" -ForegroundColor Cyan
         Write-Host ""
-        Write-Host "⊘ Skipped - SMTP not configured" -ForegroundColor DarkGray
+        Write-Host "SKIP: Skipped - SMTP not configured" -ForegroundColor DarkGray
         Write-Host "  To enable: Add SmtpSenderEmail, SmtpRecipientEmail, SmtpPassword to config" -ForegroundColor DarkGray
         return
     }
@@ -646,24 +639,18 @@ function Configure-Msmtp {
     }
 
     # Configure msmtp directly (avoiding interactive prompts)
-    $cmd = (@(
-        "echo -n '$($Options.SmtpPassword)' > /etc/msmtp-password"
-        "chmod 600 /etc/msmtp-password"
-        "sed -i 's|^from.*|from           $fromEmail|' /etc/msmtprc"
-        "sed -i 's|^user.*|user           $($Options.SmtpSenderEmail)|' /etc/msmtprc"
-        "chmod 600 /etc/msmtprc"
-        "printf 'root: %s\nheadscale: %s\ndefault: %s\n' '$recipient' '$recipient' '$recipient' > /etc/aliases"
-        "echo 'msmtp configured: auth=$($Options.SmtpSenderEmail) from=$fromEmail to=$recipient'"
-    ) -join " && ")
+    $smtpPass = $Options.SmtpPassword
+    $smtpUser = $Options.SmtpSenderEmail
+    $cmd = "echo -n '$smtpPass' > /etc/msmtp-password; chmod 600 /etc/msmtp-password; sed -i 's|^from.*|from           $fromEmail|' /etc/msmtprc; sed -i 's|^user.*|user           $smtpUser|' /etc/msmtprc; chmod 600 /etc/msmtprc; printf 'root: %s\nheadscale: %s\ndefault: %s\n' '$recipient' '$recipient' '$recipient' > /etc/aliases"
 
     try {
         multipass exec $Options.Name -- sudo bash -c $cmd
-        Write-Host "✓ Email notifications configured!" -ForegroundColor Green
+        Write-Host "OK: Email notifications configured!" -ForegroundColor Green
         Write-Host "  Auth (user): $($Options.SmtpSenderEmail)" -ForegroundColor DarkGray
         Write-Host "  From: $fromEmail" -ForegroundColor DarkGray
         Write-Host "  Recipient: $recipient" -ForegroundColor DarkGray
     } catch {
-        Write-Host "✗ Failed to configure msmtp: $_" -ForegroundColor Red
+        Write-Host "ERROR: Failed to configure msmtp: $_" -ForegroundColor Red
         Write-Host "  Email notifications will not work" -ForegroundColor Yellow
     }
 }
@@ -684,9 +671,9 @@ function Configure-Ngrok {
     # Configure ngrok for root user since Start-Ngrok runs as sudo
     try {
         multipass exec $Options.Name -- sudo ngrok config add-authtoken $Options.NgrokToken
-        Write-Host "✓ Authenticated successfully!" -ForegroundColor Green
+        Write-Host "OK: Authenticated successfully!" -ForegroundColor Green
     } catch {
-        Write-Host "✗ Failed to apply configuration: $_" -ForegroundColor Red
+        Write-Host "ERROR: Failed to apply configuration: $_" -ForegroundColor Red
         throw
     }
 }
@@ -706,26 +693,17 @@ function Start-Ngrok {
 
     # Start ngrok in background using nohup - use bash -c to avoid stdin blocking
     # Forward to HTTP port 80 since Caddy is reconfigured for testing (not HTTPS 443)
-    $cmd = (@(
-        "pkill ngrok 2>/dev/null || true"
-        "nohup ngrok http --domain=$($Options.Domain) http://localhost:80 > /var/log/ngrok.log 2>&1 &"
-        "sleep 3"
-        "if pgrep -x ngrok > /dev/null"
-            "then echo '✓ ngrok tunnel started successfully'"
-                "echo '  PID: `$(pgrep -x ngrok)'"
-                "echo '  Log: /var/log/ngrok.log'"
-            "else echo '✗ Failed to start ngrok'"
-                "exit 1"
-        "fi"
-    ) -join "; ")
+    $domain = $Options.Domain
+    $cmd = 'pkill ngrok 2>/dev/null; nohup ngrok http --domain=' + $domain + ' 80 > /var/log/ngrok.log 2>&1 & sleep 3; pgrep -x ngrok'
 
     try {
         multipass exec $Options.Name -- sudo bash -c $cmd
-        Write-Host "✓ Ngrok tunnel running in background!" -ForegroundColor Green
-        Write-Host "  Tunnel: https://$($Options.Domain) → VM:80" -ForegroundColor Cyan
-        Write-Host "  View logs: multipass exec '$($Options.Name)' -- tail -f /var/log/ngrok.log" -ForegroundColor White
+        Write-Host "OK: Ngrok tunnel running in background!" -ForegroundColor Green
+        Write-Host "  Tunnel: https://$($Options.Domain) -> VM:80" -ForegroundColor Cyan
+        $vmName = $Options.Name
+        Write-Host "  View logs: multipass exec $vmName -- tail -f /var/log/ngrok.log" -ForegroundColor White
     } catch {
-        Write-Host "✗ Failed to start ngrok tunnel: $_" -ForegroundColor Red
+        Write-Host "ERROR: Failed to start ngrok tunnel: $_" -ForegroundColor Red
         throw
     }
 }
@@ -744,21 +722,15 @@ function Install-Ngrok {
     Write-Host "Installing ngrok inside VM..." -ForegroundColor Yellow
 
     # Download and install ngrok using bash -c to avoid stdin blocking
-    $cmd = (@(
-        "curl -sSL https://ngrok-agent.s3.amazonaws.com/ngrok.asc | tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null"
-        "echo 'deb https://ngrok-agent.s3.amazonaws.com bookworm main' | tee /etc/apt/sources.list.d/ngrok.list"
-        "apt update"
-        "apt install -y ngrok"
-        "echo '✓ ngrok installed: `$(ngrok version)'"
-    ) -join " && ")
+    $cmd = "curl -sSL https://ngrok-agent.s3.amazonaws.com/ngrok.asc | tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null; echo 'deb https://ngrok-agent.s3.amazonaws.com bookworm main' | tee /etc/apt/sources.list.d/ngrok.list; apt update; apt install -y ngrok"
 
     try {
         # Install ngrok binary
         multipass exec $($Options.Name) -- sudo bash -c $cmd
 
-        Write-Host "✓ ngrok installed successfully!" -ForegroundColor Green
+        Write-Host "OK: ngrok installed successfully!" -ForegroundColor Green
     } catch {
-        Write-Host "✗ Failed to install ngrok: $_" -ForegroundColor Red
+        Write-Host "ERROR: Failed to install ngrok: $_" -ForegroundColor Red
     }
 }
 
@@ -814,11 +786,12 @@ function Show-TroubleshootingInfo {
         [hashtable]$Options = $ModuleScope.Options
     )
 
+    $vmName = $Options.Name
     Write-Host "Troubleshooting:" -ForegroundColor Cyan
-    Write-Host "  View logs:    multipass exec '$($Options.Name)' -- journalctl -u headscale -f" -ForegroundColor White
-    Write-Host "  View setup:   multipass exec '$($Options.Name)' -- cat /var/log/cloud-init-output.log" -ForegroundColor White
-    Write-Host "  Stop VM:      multipass stop '$($Options.Name)'" -ForegroundColor White
-    Write-Host "  Delete VM:    multipass delete '$($Options.Name)' && multipass purge" -ForegroundColor White
+    Write-Host "  View logs:    multipass exec $vmName -- journalctl -u headscale -f" -ForegroundColor White
+    Write-Host "  View setup:   multipass exec $vmName -- cat /var/log/cloud-init-output.log" -ForegroundColor White
+    Write-Host "  Stop VM:      multipass stop $vmName" -ForegroundColor White
+    Write-Host "  Delete VM:    multipass delete $vmName; multipass purge" -ForegroundColor White
     Write-Host ""
 }
 
@@ -862,15 +835,13 @@ function Main {
 
     try {
         # Show banner
-        Write-Host @"
-
-========================================
-  Headscale VPS Deployment (Testing)
-========================================
-
-See TESTING.md for full documentation.
-
-"@ -ForegroundColor Cyan
+        Write-Host ""
+        Write-Host "========================================" -ForegroundColor Cyan
+        Write-Host "  Headscale VPS Deployment (Testing)" -ForegroundColor Cyan
+        Write-Host "========================================" -ForegroundColor Cyan
+        Write-Host ""
+        Write-Host "See TESTING.md for full documentation." -ForegroundColor Cyan
+        Write-Host ""
         # Prerequisites
         Test-Prerequisites
 
@@ -934,12 +905,13 @@ See TESTING.md for full documentation.
                 try {
                     multipass delete $ModuleScope.Options.Name
                     multipass purge
-                    Write-Host "✓ Cleanup complete" -ForegroundColor Green
+                    Write-Host "OK: Cleanup complete" -ForegroundColor Green
                 } catch {
-                    Write-Host "✗ Cleanup failed: $_" -ForegroundColor Red
+                    Write-Host "ERROR: Cleanup failed: $_" -ForegroundColor Red
                 }
             } else {
-                Write-Host "VM '$($ModuleScope.Options.Name)' left intact for troubleshooting" -ForegroundColor Cyan
+                $vmName = $ModuleScope.Options.Name
+                Write-Host "VM $vmName left intact for troubleshooting" -ForegroundColor Cyan
             }
             Write-Host ""
         }
