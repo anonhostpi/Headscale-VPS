@@ -1,0 +1,167 @@
+#!/bin/bash
+# headscale-user-setup - Setup ubuntu user with SSH access, then disable root SSH
+# Usage: headscale-user-setup [--non-interactive PASSWORD]
+
+set -e
+
+SCRIPT_NAME=$(basename "$0")
+NON_INTERACTIVE=false
+PROVIDED_PASSWORD=""
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --non-interactive)
+            NON_INTERACTIVE=true
+            PROVIDED_PASSWORD="$2"
+            shift 2
+            ;;
+        -h|--help)
+            echo "Usage: $SCRIPT_NAME [--non-interactive PASSWORD]"
+            echo ""
+            echo "Sets up the ubuntu user account with SSH access and disables root SSH."
+            echo ""
+            echo "Options:"
+            echo "  --non-interactive PASSWORD  Run without prompts using provided password"
+            echo "  -h, --help                  Show this help message"
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1"
+            exit 1
+            ;;
+    esac
+done
+
+# Must be run as root
+if [[ $EUID -ne 0 ]]; then
+    echo "ERROR: This script must be run as root"
+    exit 1
+fi
+
+echo "=========================================="
+echo "  Headscale VPS User Setup"
+echo "=========================================="
+echo ""
+
+# Check if ubuntu user exists
+if id "ubuntu" &>/dev/null; then
+    echo "OK: User 'ubuntu' already exists"
+    USER_EXISTS=true
+else
+    echo "Creating user 'ubuntu'..."
+    useradd -m -s /bin/bash -G sudo ubuntu
+    echo "OK: User 'ubuntu' created"
+    USER_EXISTS=false
+fi
+
+# Ensure home directory exists
+UBUNTU_HOME=$(getent passwd ubuntu | cut -d: -f6)
+if [[ -z "$UBUNTU_HOME" ]]; then
+    UBUNTU_HOME="/home/ubuntu"
+fi
+
+if [[ ! -d "$UBUNTU_HOME" ]]; then
+    echo "Creating home directory..."
+    mkdir -p "$UBUNTU_HOME"
+    cp -a /etc/skel/. "$UBUNTU_HOME/" 2>/dev/null || true
+    chown -R ubuntu:ubuntu "$UBUNTU_HOME"
+    chmod 750 "$UBUNTU_HOME"
+    echo "OK: Home directory created at $UBUNTU_HOME"
+else
+    echo "OK: Home directory exists at $UBUNTU_HOME"
+fi
+
+# Set password
+echo ""
+if [[ "$NON_INTERACTIVE" == "true" ]]; then
+    if [[ -z "$PROVIDED_PASSWORD" ]]; then
+        echo "ERROR: Password required in non-interactive mode"
+        exit 1
+    fi
+    echo "ubuntu:$PROVIDED_PASSWORD" | chpasswd
+    echo "OK: Password set"
+else
+    echo "Set password for 'ubuntu' user:"
+    passwd ubuntu
+fi
+
+# Ensure ubuntu user has sudo access
+if groups ubuntu | grep -q sudo; then
+    echo "OK: User 'ubuntu' has sudo access"
+else
+    usermod -aG sudo ubuntu
+    echo "OK: Added 'ubuntu' to sudo group"
+fi
+
+# Setup SSH directory for ubuntu user
+SSH_DIR="$UBUNTU_HOME/.ssh"
+
+if [[ ! -d "$SSH_DIR" ]]; then
+    mkdir -p "$SSH_DIR"
+    echo "OK: Created $SSH_DIR"
+fi
+
+# Copy root's authorized_keys if ubuntu doesn't have any
+if [[ ! -f "$SSH_DIR/authorized_keys" ]] || [[ ! -s "$SSH_DIR/authorized_keys" ]]; then
+    if [[ -f /root/.ssh/authorized_keys ]]; then
+        cp /root/.ssh/authorized_keys "$SSH_DIR/authorized_keys"
+        echo "OK: Copied SSH keys from root"
+    else
+        echo "WARNING: No SSH keys found to copy"
+        echo "  You may need to add SSH keys manually to: $SSH_DIR/authorized_keys"
+    fi
+fi
+
+# Set proper ownership and permissions
+chown -R ubuntu:ubuntu "$SSH_DIR"
+chmod 700 "$SSH_DIR"
+chmod 600 "$SSH_DIR/authorized_keys" 2>/dev/null || true
+echo "OK: SSH directory permissions set"
+
+# Verify SSH access is allowed for ubuntu (check for AllowUsers/DenyUsers)
+SSHD_CONFIG="/etc/ssh/sshd_config"
+if grep -q "^AllowUsers" "$SSHD_CONFIG" 2>/dev/null; then
+    if ! grep "^AllowUsers.*ubuntu" "$SSHD_CONFIG" &>/dev/null; then
+        # Add ubuntu to AllowUsers
+        sed -i 's/^AllowUsers.*/& ubuntu/' "$SSHD_CONFIG"
+        echo "OK: Added 'ubuntu' to AllowUsers"
+    fi
+fi
+
+# Disable root SSH login
+HARDENING_CONF="/etc/ssh/sshd_config.d/99-hardening.conf"
+if [[ -f "$HARDENING_CONF" ]]; then
+    if grep -q "^PermitRootLogin no" "$HARDENING_CONF"; then
+        echo "OK: Root SSH login already disabled"
+    else
+        sed -i 's/^PermitRootLogin.*/PermitRootLogin no/' "$HARDENING_CONF"
+        echo "OK: Root SSH login disabled in $HARDENING_CONF"
+    fi
+else
+    # Fallback to main sshd_config
+    if grep -q "^PermitRootLogin no" "$SSHD_CONFIG"; then
+        echo "OK: Root SSH login already disabled"
+    else
+        sed -i 's/^#*PermitRootLogin.*/PermitRootLogin no/' "$SSHD_CONFIG"
+        echo "OK: Root SSH login disabled"
+    fi
+fi
+
+# Restart SSH to apply changes
+echo ""
+echo "Restarting SSH service..."
+systemctl restart sshd
+echo "OK: SSH service restarted"
+
+echo ""
+echo "=========================================="
+echo "  Setup Complete"
+echo "=========================================="
+echo ""
+echo "You can now SSH as: ubuntu@<server-ip>"
+echo "Root SSH access has been disabled."
+echo ""
+echo "IMPORTANT: Test SSH access in a NEW terminal before"
+echo "closing this session to avoid being locked out!"
+echo ""

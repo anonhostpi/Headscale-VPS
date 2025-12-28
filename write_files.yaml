@@ -71,3 +71,5 @@
   permissions: "0644"
 - path: /opt/setup-headscale.sh
   permissions: "0755"
+- path: /usr/local/bin/headscale-user-setup
+  permissions: "0755"
