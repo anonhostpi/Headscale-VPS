@@ -54,3 +54,23 @@ MATRIX_REGISTRATION_TOKEN="${MATRIX_REGISTRATION_TOKEN}"
 EOF
   chmod 600 "$ENV_FILE"
 }
+
+# Process templates via envsubst
+process_templates() {
+  export HEADSCALE_DOMAIN AZURE_TENANT_ID AZURE_CLIENT_ID AZURE_CLIENT_SECRET
+  export ALLOWED_EMAIL MATRIX_DOMAIN MATRIX_SERVER_NAME
+  export MATRIX_FEDERATION MATRIX_ALLOW_REGISTRATION MATRIX_REGISTRATION_TOKEN
+
+  HEADSCALE_IP=$(getent ahosts "$HEADSCALE_DOMAIN" 2>/dev/null | awk '/STREAM/ {print $1; exit}')
+  export HEADSCALE_IP
+
+  envsubst < "$TEMPLATES_DIR/headscale.yaml.tpl" > /etc/headscale/config.yaml
+  envsubst < "$TEMPLATES_DIR/headplane.yaml.tpl" > /etc/headplane/config.yaml
+  envsubst < "$TEMPLATES_DIR/Caddyfile.tpl" > /etc/caddy/Caddyfile
+
+  if [ "${MATRIX_ENABLED:-false}" = "true" ] && [ -f "$TEMPLATES_DIR/Caddyfile-matrix.tpl" ]; then
+    envsubst < "$TEMPLATES_DIR/Caddyfile-matrix.tpl" >> /etc/caddy/Caddyfile
+    envsubst < /etc/matrix-conduit/conduit.toml.tpl > /etc/matrix-conduit/conduit.toml
+    chown conduit:conduit /etc/matrix-conduit/conduit.toml
+  fi
+}
