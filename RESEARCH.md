@@ -8,9 +8,9 @@ last_squashed_commit: null
 created: 2026-02-22
 branch: feat/matrix-server
 worktree: /Users/nick/repos/Headscale-VPS-matrix-server
-pr_number: null
-pr_url: null
-pr_state: null
+pr_number: 1
+pr_url: https://github.com/anonhostpi/Headscale-VPS/pull/1
+pr_state: draft
 ---
 
 # RESEARCH: Matrix Homeserver for Headscale VPS
