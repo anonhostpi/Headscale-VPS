@@ -18,3 +18,12 @@ echo "[1/5] Creating conduit user..."
 if ! id -u conduit > /dev/null 2>&1; then
   useradd --system --home /var/lib/matrix-conduit --shell /usr/sbin/nologin conduit
 fi
+
+# Create data and log directories
+echo "[2/5] Creating directories..."
+mkdir -p /var/lib/matrix-conduit
+mkdir -p /var/log/matrix-conduit
+mkdir -p /etc/matrix-conduit
+chown -R conduit:conduit /var/lib/matrix-conduit
+chown -R conduit:conduit /var/log/matrix-conduit
+chown -R conduit:conduit /etc/matrix-conduit
