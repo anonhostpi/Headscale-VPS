@@ -1,0 +1,17 @@
+#!/bin/bash
+set -e
+# server-config - Unified YAML-driven configuration wizard
+# Usage: cat config.yaml | sudo server-config
+#        sudo server-config --config /path/to/config.yaml
+#        sudo server-config  (interactive prompts)
+
+source /usr/local/lib/relay-common.sh
+source /usr/local/lib/relay-secrets.sh
+
+TEMPLATES_DIR="/etc/relay-server/templates"
+ENV_FILE="/etc/environment.d/relay-server.conf"
+CONFIG_FILE=""
+
+while [[ $# -gt 0 ]]; do
+  case $1 in --config) CONFIG_FILE="$2"; shift 2 ;; *) shift ;; esac
+done
