@@ -18,3 +18,23 @@ case "$ARCH" in
 esac
 
 YQ_URL="https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux_${YQ_ARCH}"
+
+echo "[1/3] Downloading yq ${YQ_VERSION}..."
+wget -q "$YQ_URL" -O /tmp/yq
+
+if [ -n "$YQ_SHA256" ]; then
+  echo "${YQ_SHA256}  /tmp/yq" | sha256sum -c - || {
+    echo "ERROR: yq checksum verification failed!"
+    rm -f /tmp/yq; exit 1
+  }
+  echo "    Checksum verified: OK"
+fi
+
+echo "[2/3] Installing yq to /usr/local/bin/yq..."
+install -m 0755 /tmp/yq /usr/local/bin/yq
+rm -f /tmp/yq
+
+echo "[3/3] Verifying installation..."
+yq --version
+echo ""
+echo "yq installation complete."
