@@ -1,7 +1,8 @@
 # Monitor config changes
--w /etc/headscale/ -p wa -k headscale_config
+-w /etc/relay-server/ -p wa -k relay_config
 -w /etc/headplane/ -p wa -k headplane_config
 -w /etc/caddy/ -p wa -k caddy_config
+-w /var/lib/matrix-conduit/ -p wa -k matrix_data
 
 # Monitor secret access
 -w /var/lib/headscale/api_key -p r -k api_key_access
