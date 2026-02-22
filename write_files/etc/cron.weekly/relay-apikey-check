@@ -15,7 +15,7 @@ DAYS_LEFT=$(( ($(date -d "$EXPIRES" +%s) - $(date -d "$TODAY" +%s)) / 86400 ))
 
 if [ $DAYS_LEFT -lt 14 ]; then
   echo "$(date): API key expires in $DAYS_LEFT days, rotating..." >> "$LOGFILE"
-  /usr/local/bin/headscale-rotate-apikey >> "$LOGFILE" 2>&1
+  /usr/local/bin/relay-rotate-apikey >> "$LOGFILE" 2>&1
 else
   echo "$(date): API key valid for $DAYS_LEFT more days" >> "$LOGFILE"
 fi
