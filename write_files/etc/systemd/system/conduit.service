@@ -1,0 +1,18 @@
+[Unit]
+Description=Conduit Matrix Homeserver
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=conduit
+Group=conduit
+Environment=CONDUIT_CONFIG=/etc/matrix-conduit/conduit.toml
+ExecStart=/usr/local/bin/matrix-conduit
+Restart=always
+RestartSec=5
+StandardOutput=append:/var/log/matrix-conduit/conduit.log
+StandardError=append:/var/log/matrix-conduit/conduit.log
+
+[Install]
+WantedBy=multi-user.target
