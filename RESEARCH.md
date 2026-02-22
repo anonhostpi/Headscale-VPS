@@ -88,32 +88,38 @@ change that touches nearly every file in the repo. It would:
 - Create churn in every script, template, and config file
 - Risk introducing bugs from find-and-replace across shell scripts
 
-### Recommendation: Phased Rename — Minimal for This PR
+### Full Rename in This PR
 
-**For this PR**, limit rename to documentation and user-facing identity:
-- **README.md** header/description: Describe as "Coordination & Relay Server"
-- **cloud-init.yml** header comment: Update description
-- **New scripts** use generic naming: `server-config` (not `headscale-config` or
-  `matrix-config`) for the unified wizard
+All management scripts and config paths renamed from `headscale-*` to `relay-*`:
 
-**NOT in this PR** (future work):
-- Renaming `/etc/headscale/` → `/etc/relay-server/` or similar
-- Renaming `headscale-common.sh` → `common.sh`
-- Renaming the GitHub repo
-- Renaming existing systemd units
+| Old | New |
+|-----|-----|
+| `/etc/headscale/` | `/etc/relay-server/` |
+| `/usr/local/lib/headscale-common.sh` | `/usr/local/lib/relay-common.sh` |
+| `/usr/local/lib/headscale-validators.sh` | `/usr/local/lib/relay-validators.sh` |
+| `/usr/local/lib/headscale-secrets.sh` | `/usr/local/lib/relay-secrets.sh` |
+| `/usr/local/bin/headscale-config` | `/usr/local/bin/relay-config` |
+| `/usr/local/bin/headscale-healthcheck` | `/usr/local/bin/relay-healthcheck` |
+| `/usr/local/bin/headscale-update` | `/usr/local/bin/relay-update` |
+| `/usr/local/bin/headscale-rotate-apikey` | `/usr/local/bin/relay-rotate-apikey` |
+| `/usr/local/bin/headscale-migrate-secrets` | `/usr/local/bin/relay-migrate-secrets` |
+| `/usr/local/bin/headscale-user-setup` | `/usr/local/bin/relay-user-setup` |
+| `/usr/local/bin/msmtp-config` | `/usr/local/bin/relay-msmtp-config` |
+| `headscale-healthcheck.service` | `relay-healthcheck.service` |
+| `headscale-healthcheck.timer` | `relay-healthcheck.timer` |
+| `headscale-apikey-check` (cron) | `relay-apikey-check` |
+| `headscale.rules` (audit) | `relay-server.rules` |
+| `headscale` (logrotate) | `relay-server` |
 
-**Rationale:** The rename is conceptual for now. The repo already works and existing
-scripts reference `headscale-*` paths. A full rename is a separate, carefully
-planned PR that doesn't mix with new feature work.
+**NOT renamed** (third-party software / their data paths):
+- `headscale` binary and `headscale.service` (the Tailscale control server)
+- `headplane.service` (the Headscale web UI)
+- `headscale` system user (owns Headscale data)
+- `/var/lib/headscale/`, `/var/lib/headplane/` (service data directories)
+- `headscale.conf` fail2ban jail (references headscale-specific logs)
 
-### New Naming Convention (for new files only)
-
-New files in this PR use the **`server-*`** prefix instead of `headscale-*`:
-- `/usr/local/bin/server-config` — unified config wizard
-- `/etc/server/config.yaml.example` — example YAML config
-- Documentation references "Coordination & Relay Server"
-
-Existing files keep their `headscale-*` names — those are renamed in a future PR.
+New files use the `relay-*` prefix consistently, plus `server-config` for the
+unified wizard and `matrix-*` for Matrix-specific tools.
 
 ---
 
