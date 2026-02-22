@@ -27,3 +27,16 @@ mkdir -p /etc/matrix-conduit
 chown -R conduit:conduit /var/lib/matrix-conduit
 chown -R conduit:conduit /var/log/matrix-conduit
 chown -R conduit:conduit /etc/matrix-conduit
+
+# Download Conduit binary with SHA256 verification
+echo "[3/5] Downloading Conduit ${CONDUIT_VERSION}..."
+wget -q "$BINARY_URL" -O /tmp/matrix-conduit
+
+if [ -n "$CONDUIT_SHA256" ]; then
+  echo "${CONDUIT_SHA256}  /tmp/matrix-conduit" | sha256sum -c - || {
+    echo "ERROR: Conduit binary checksum verification failed!"
+    rm -f /tmp/matrix-conduit
+    exit 1
+  }
+  echo "    Checksum verified: OK"
+fi
