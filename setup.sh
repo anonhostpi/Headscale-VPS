@@ -15,17 +15,5 @@ export ALLOWED_EMAIL=""
 
 /usr/local/bin/relay-config
 
-# SMTP login:
-export SMTP_SENDER_EMAIL=""
-export SMTP_PASSWORD=""
-
-# SMTP email headers:
-export SMTP_FROM_EMAIL=""
-export SMTP_RECIPIENT_EMAIL=""
-
-echo -n "${SMTP_PASSWORD}" > /etc/msmtp-password
-chmod 600 /etc/msmtp-password
-sed -i "s|^from.*|from           ${SMTP_FROM_EMAIL}|" /etc/msmtprc
-sed -i "s|^user.*|user           ${SMTP_SENDER_EMAIL}|" /etc/msmtprc
-chmod 600 /etc/msmtprc
-printf 'root: %s\nheadscale: %s\ndefault: %s\n' "$SMTP_RECIPIENT_EMAIL" "$SMTP_RECIPIENT_EMAIL" "$SMTP_RECIPIENT_EMAIL" >> /etc/aliases
+# SMTP config (if not using server-config):
+/usr/local/bin/relay-msmtp-config
