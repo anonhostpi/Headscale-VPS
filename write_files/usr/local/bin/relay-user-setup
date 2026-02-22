@@ -40,7 +40,7 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 echo "=========================================="
-echo "  Headscale VPS User Setup"
+echo "  Relay Server User Setup"
 echo "=========================================="
 echo ""
 
