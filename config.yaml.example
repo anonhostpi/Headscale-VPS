@@ -1,0 +1,13 @@
+# Coordination & Relay Server Configuration
+# Store this in your password manager for full server recovery
+# Usage: cat config.yaml | sudo server-config
+#        sudo server-config --config config.yaml
+
+# === Headscale VPN ===
+headscale:
+  domain: vpn.example.com              # Public domain for Headscale
+  oidc:
+    tenant_id: contoso.onmicrosoft.com  # Azure AD tenant (GUID or *.onmicrosoft.com)
+    client_id: 12345678-1234-1234-1234-123456789abc  # Azure app client ID
+    client_secret: your-client-secret-here           # Azure app client secret
+    allowed_email: user@example.com                  # Allowed login email
