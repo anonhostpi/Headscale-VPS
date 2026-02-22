@@ -29,17 +29,17 @@
   permissions: "0644"
 - path: /opt/install-headplane.sh
   permissions: "0755"
-- path: /usr/local/bin/headscale-rotate-apikey
+- path: /usr/local/bin/relay-rotate-apikey
   permissions: "0755"
-- path: /etc/cron.weekly/headscale-apikey-check
+- path: /etc/cron.weekly/relay-apikey-check
   permissions: "0755"
-- path: /usr/local/bin/headscale-migrate-secrets
+- path: /usr/local/bin/relay-migrate-secrets
   permissions: "0755"
-- path: /usr/local/bin/headscale-healthcheck
+- path: /usr/local/bin/relay-healthcheck
   permissions: "0755"
-- path: /etc/systemd/system/headscale-healthcheck.service
+- path: /etc/systemd/system/relay-healthcheck.service
   permissions: "0644"
-- path: /etc/systemd/system/headscale-healthcheck.timer
+- path: /etc/systemd/system/relay-healthcheck.timer
   permissions: "0644"
 - path: /etc/logrotate.d/headscale
   permissions: "0644"
