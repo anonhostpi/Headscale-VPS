@@ -11,3 +11,17 @@
         systemctl kill -s HUP headscale.service 2>/dev/null || true
     endscript
 }
+
+/var/log/matrix-conduit/*.log {
+    daily
+    rotate 7
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0640 conduit conduit
+    sharedscripts
+    postrotate
+        systemctl kill -s HUP conduit.service 2>/dev/null || true
+    endscript
+}
