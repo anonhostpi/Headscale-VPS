@@ -11,3 +11,14 @@ headscale:
     client_id: 12345678-1234-1234-1234-123456789abc  # Azure app client ID
     client_secret: your-client-secret-here           # Azure app client secret
     allowed_email: user@example.com                  # Allowed login email
+
+# === Matrix Messaging ===
+matrix:
+  enabled: true                         # Install and configure Matrix
+  domain: matrix.example.com            # Public domain for Matrix (Caddy listens here)
+  server_name: example.com              # User ID domain (@user:example.com)
+  federation: false                     # Disable federation (private server)
+  registration: token                   # disabled | token | open
+  registration_token: null              # Auto-generated if null and registration=token
+  admin_user: admin                     # First admin username
+  admin_password: null                  # Auto-generated if null
