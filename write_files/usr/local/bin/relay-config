@@ -1,13 +1,13 @@
 #!/bin/bash
 set -e
 
-# Load shared libraries (headscale-secrets.sh loads constants.conf)
-source /usr/local/lib/headscale-common.sh
-source /usr/local/lib/headscale-validators.sh
-source /usr/local/lib/headscale-secrets.sh
+# Load shared libraries (relay-secrets.sh loads constants.conf)
+source /usr/local/lib/relay-common.sh
+source /usr/local/lib/relay-validators.sh
+source /usr/local/lib/relay-secrets.sh
 
-ENV_FILE="/etc/environment.d/headscale.conf"
-TEMPLATES_DIR="/etc/headscale/templates"
+ENV_FILE="/etc/environment.d/relay-server.conf"
+TEMPLATES_DIR="/etc/relay-server/templates"
 
 # Load existing configuration if present
 load_existing_config() {
