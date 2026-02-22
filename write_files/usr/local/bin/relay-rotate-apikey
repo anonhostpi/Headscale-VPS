@@ -1,9 +1,9 @@
 #!/bin/bash
 set -e
 
-# Load shared libraries (headscale-secrets.sh loads constants.conf)
-source /usr/local/lib/headscale-common.sh
-source /usr/local/lib/headscale-secrets.sh
+# Load shared libraries (relay-secrets.sh loads constants.conf)
+source /usr/local/lib/relay-common.sh
+source /usr/local/lib/relay-secrets.sh
 
 API_KEY_FILE="/var/lib/headscale/api_key"
 API_KEY_EXPIRES="/var/lib/headscale/api_key_expires"
