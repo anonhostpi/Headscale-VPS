@@ -74,3 +74,19 @@ process_templates() {
     chown conduit:conduit /etc/matrix-conduit/conduit.toml
   fi
 }
+
+# Detect input mode and load config vars
+load_config() {
+  if [ -n "$CONFIG_FILE" ]; then
+    parse_yaml "$CONFIG_FILE"
+  elif [ ! -t 0 ]; then
+    TMPFILE=$(mktemp)
+    cat > "$TMPFILE"
+    parse_yaml "$TMPFILE"
+    rm -f "$TMPFILE"
+  else
+    # Interactive mode: fall back to relay-config
+    source /usr/local/lib/relay-validators.sh
+    exec /usr/local/bin/relay-config
+  fi
+}
