@@ -1,8 +1,8 @@
 ---
-topic: MATRIX.HOMESERVER.VPS.DEPLOYMENT
+topic: COORDINATION.RELAY.SERVER
 phase: discovery
-rule: 0
-feedback_iteration: 0
+rule: 6
+feedback_iteration: 1
 baseline_commit: 4b86ed6
 last_squashed_commit: null
 created: 2026-02-22
@@ -13,226 +13,336 @@ pr_url: https://github.com/anonhostpi/Headscale-VPS/pull/1
 pr_state: draft
 ---
 
-# RESEARCH: Matrix Homeserver for Headscale VPS
+# RESEARCH: Coordination & Relay Server (Rule 6 — Expanded Scope)
 
 ## Problem Statement
 
-Add a Matrix homeserver to the existing Headscale-VPS deployment. The server must
-be lightweight (VPS already runs Headscale + Headplane + Caddy + Node.js), support
-bot account creation for agent use (per Agents repo Issue #44), federate with the
-public Matrix network, and integrate with the existing cloud-init / `write_files`
-/ `setup.sh` deployment pattern.
+Expand the Headscale-VPS repo from a single-purpose VPN server into a multi-service
+**Coordination and Relay Server** hosting Headscale (VPN) + Matrix (messaging) +
+potentially more services. Three major changes:
+
+1. **Add Matrix homeserver** — Conduit/Continuwuity (lightweight, no PostgreSQL)
+2. **Rename/repurpose** — "Headscale-VPS" → reflects multi-service purpose
+3. **Unified YAML-driven config** — Single YAML document (pipeable from stdin) that
+   replaces all interactive config wizards, including security-sensitive values
 
 ---
 
-## Existing Repo Pattern Analysis
+## Rule 6 Context
 
-The Headscale-VPS repo deploys via cloud-init with this flow:
+This is a Rule 6 feedback iteration on the original Rule 0 research. User decisions:
 
-1. **`cloud-init.yml`** — `bootcmd` clones the repo, reads `write_files.yaml` as
-   a manifest, copies files from `write_files/` to their target paths with correct
-   permissions. Then `runcmd` runs setup scripts.
+- **Domain questions**: Deferred — everything configurable via the setup wizard
+- **Federation**: Private-only (no federation)
+- **Registration**: Deferred — configurable via YAML
+- **Config wizard**: Unified/integrated (not separate per-service)
 
-2. **`write_files.yaml`** — Flat manifest: `path` + `permissions` pairs. Files in
-   `write_files/` mirror the filesystem layout (e.g., `write_files/etc/caddy/...`
-   maps to `/etc/caddy/...`).
-
-3. **`write_files/opt/setup-headscale.sh`** — Main setup script run by cloud-init
-   `runcmd`. Creates users, installs packages (Caddy, Headscale), sets up firewall,
-   enables systemd services.
-
-4. **`write_files/opt/install-headplane.sh`** — Secondary install script run after
-   setup. Builds Headplane from source (NVM, Node.js, pnpm).
-
-5. **`write_files/usr/local/bin/headscale-config`** — Interactive config wizard run
-   post-deploy. Prompts for domain/OIDC values, processes templates via `envsubst`,
-   restarts services.
-
-6. **Templates** in `write_files/etc/headscale/templates/` — `envsubst`-processed
-   `.tpl` files for Headscale config, Headplane config, and Caddyfile.
-
-**Key principle:** `cloud-init.yml` should be changed minimally. New services should
-be added via `write_files/` and new scripts, not by expanding cloud-init.yml.
+New scope added:
+- Repo rename from "Headscale-VPS" to multi-service identity
+- Unified YAML config document with stdin pipe support
+- Security values (passwords, tokens) included in the YAML doc
 
 ---
 
-## Candidate Comparison: Conduit-family vs Synapse
+## 1. Matrix Homeserver (Carried Forward from Rule 0)
 
-### Resource Requirements
+### Decision: Conduit-family (Continuwuity)
 
-| | Conduit-family | Synapse |
-|---|---|---|
-| **Idle RAM** | ~32 MB | 200–500 MB+ |
-| **Steady-state RAM** | < 200 MB (small server) | 512 MB – 2 GB |
-| **Database** | Embedded RocksDB (no external DB) | Requires PostgreSQL (~100 MB extra) |
-| **Runtime deps** | None (static musl binary) | Python 3.x, build-essential, libffi, etc. |
-| **Config complexity** | ~30-line TOML | 100+ line YAML |
-| **Install method** | `wget` + `chmod +x` | Python venv + pip install + Postgres setup |
+Rationale unchanged from initial research:
+- ~32 MB idle RAM vs 200 MB+ for Synapse
+- Embedded RocksDB — no PostgreSQL needed
+- Static binary install — no Python venv
+- Bot SDKs (matrix-nio, matrix-js-sdk) fully compatible
 
-### Admin API (Bot Account Creation)
+### Updated for User Decisions
 
-| | Conduit-family | Synapse |
-|---|---|---|
-| **Admin interface** | Chat commands in `#admins` room | Full REST API at `/_synapse/admin/` |
-| **Programmatic user creation** | Via Matrix client (matrix-nio) | Via `curl`/HTTP (`registration_shared_secret`) |
-| **Automation friendliness** | Workable but requires a Matrix client | Fully scriptable with shell tools |
-
-### Bot SDK Compatibility
-
-Both work with matrix-nio (Python), matrix-js-sdk (JS), and matrix-bot-sdk (TS).
-The client-server API is standardized; any spec-compliant homeserver works.
-
-### Federation & Stability
-
-| | Conduit-family | Synapse |
-|---|---|---|
-| **Federation** | Works; occasional edge cases with very large rooms | Reference implementation; excellent |
-| **Project risk** | Community fork chain (Conduit → conduwuit → Continuwuity) | Element-backed; stable |
-| **Maturity** | Good for small servers | Production-grade since ~2014 |
+- **Federation disabled by default** (`allow_federation = false`). Config YAML can
+  override to `true` for users who want it.
+- **Registration configurable** — YAML key controls: `disabled`, `token`, or `open`.
+  Default: `token` (generates a random registration token for bot account creation).
+- **Domain fully configurable** — YAML keys for `matrix.domain` (where Caddy
+  listens) and `matrix.server_name` (user ID domain). No hardcoded assumptions.
+- **Port 8448 NOT opened by default** since federation is off. Only opened when
+  `matrix.federation: true`.
 
 ---
 
-## Recommendation: Conduit-family (Continuwuity)
+## 2. Repo Rename / Repurposing
 
-**Rationale:**
+### Current State
 
-1. **Resource fit:** 32–200 MB RAM vs 200 MB–2 GB. On a VPS already running 4
-   services, this is the deciding factor.
+Everything is named `headscale-*`:
+- Repo: `Headscale-VPS`
+- Scripts: `headscale-config`, `headscale-healthcheck`, `headscale-update`, etc.
+- Libraries: `headscale-common.sh`, `headscale-validators.sh`, `headscale-secrets.sh`
+- Config paths: `/etc/headscale/`, `/usr/local/bin/headscale-*`, `/usr/local/lib/headscale-*.sh`
+- Systemd services: `headscale.service`, `headscale-healthcheck.timer`
+- Constants: `/etc/headscale/constants.conf`, `/etc/headscale/versions.conf`
 
-2. **No PostgreSQL:** Eliminates an entire service + 100 MB RAM + operational
-   complexity. The embedded RocksDB database is zero-maintenance.
+### Rename Scope Assessment
 
-3. **Trivial install:** Single static binary. No Python venv, no build tools, no
-   pip. Matches the repo's pattern of downloading binaries and configuring them
-   (like the Headscale `.deb` install).
+A full rename of every `headscale-*` path, script, and reference is a **massive**
+change that touches nearly every file in the repo. It would:
+- Break existing deployments that reference `/etc/headscale/` paths
+- Require renaming the GitHub repo itself
+- Create churn in every script, template, and config file
+- Risk introducing bugs from find-and-replace across shell scripts
 
-4. **Bot SDKs work:** matrix-nio and matrix-js-sdk are fully compatible.
+### Recommendation: Phased Rename — Minimal for This PR
 
-**Accepted tradeoff:** No REST admin API. Bot accounts are created via admin room
-commands (one-time manual step or a thin matrix-nio automation script). For the
-agent use case (a few bot accounts, created once), this is acceptable.
+**For this PR**, limit rename to documentation and user-facing identity:
+- **README.md** header/description: Describe as "Coordination & Relay Server"
+- **cloud-init.yml** header comment: Update description
+- **New scripts** use generic naming: `server-config` (not `headscale-config` or
+  `matrix-config`) for the unified wizard
 
-**Fork choice:** Continuwuity — the actively maintained community fork as of 2026.
-Original Conduit and conduwuit are no longer active.
+**NOT in this PR** (future work):
+- Renaming `/etc/headscale/` → `/etc/relay-server/` or similar
+- Renaming `headscale-common.sh` → `common.sh`
+- Renaming the GitHub repo
+- Renaming existing systemd units
+
+**Rationale:** The rename is conceptual for now. The repo already works and existing
+scripts reference `headscale-*` paths. A full rename is a separate, carefully
+planned PR that doesn't mix with new feature work.
+
+### New Naming Convention (for new files only)
+
+New files in this PR use the **`server-*`** prefix instead of `headscale-*`:
+- `/usr/local/bin/server-config` — unified config wizard
+- `/etc/server/config.yaml.example` — example YAML config
+- Documentation references "Coordination & Relay Server"
+
+Existing files keep their `headscale-*` names — those are renamed in a future PR.
 
 ---
 
-## Integration Design
+## 3. Unified YAML-Driven Config
 
-### Networking
+### Current Config Flow
 
-| Port | Protocol | Purpose | Status |
-|------|----------|---------|--------|
-| 443 | TCP | Client-Server API (via existing Caddy) | Already open |
-| 8448 | TCP | Matrix federation (server-to-server) | **New — add to UFW** |
+Three separate interactive wizards with environment variables:
 
-Internally, Conduit listens on `127.0.0.1:6167` (HTTP). Caddy terminates TLS and
-proxies `/_matrix/*` to it.
+1. **`headscale-config`** — Prompts for domain, Azure OIDC settings, writes
+   `/etc/environment.d/headscale.conf`, processes templates via `envsubst`
+2. **`msmtp-config`** — Prompts for SMTP email/password, writes `/etc/msmtprc`
+3. **`setup.sh`** (manual) — User exports env vars and runs scripts manually
 
-### Caddy Integration
+Each wizard has its own `read -p` prompts, its own validation, and its own output
+format. There's no single document that captures the full server configuration.
 
-The existing Caddyfile template (`Caddyfile.tpl`) handles `${HEADSCALE_DOMAIN}`.
-Matrix needs additional Caddy blocks for:
+### Design: Unified YAML Config Document
 
-1. **Matrix subdomain** (`matrix.${HEADSCALE_DOMAIN}`) — proxies `/_matrix/*` to
-   Conduit on `:6167`
-2. **Federation port** — Caddy also listens on `:8448` for server-to-server traffic
-3. **Well-known delegation** (optional) — if user IDs should be
-   `@user:example.com` instead of `@user:matrix.example.com`, serve well-known
-   files from the base domain
+A single YAML document that contains ALL server configuration. The user can:
+- **Pipe from stdin**: `cat config.yaml | sudo server-config`
+- **Pass as file**: `sudo server-config --config /path/to/config.yaml`
+- **Interactive fallback**: If no stdin/file, fall back to interactive prompts
+  (preserving backward compatibility)
+- **Store in password manager**: The complete YAML includes secrets, so one document
+  fully configures the server
 
-**Approach:** Add a new Caddyfile template (`Caddyfile-matrix.tpl`) that Caddy
-imports, rather than bloating the existing `Caddyfile.tpl`. Caddy supports
-`import` directives for modular configs.
+### YAML Schema
 
-### Setup Flow Integration
+```yaml
+# Coordination & Relay Server Configuration
+# Store this in your password manager for full server recovery
 
-The Matrix setup should be a separate install script (`/opt/install-matrix.sh`)
-called from cloud-init `runcmd`, following the same pattern as
-`install-headplane.sh`:
+# === Headscale VPN ===
+headscale:
+  domain: vpn.example.com              # Public domain for Headscale
+  oidc:
+    tenant_id: contoso.onmicrosoft.com  # Azure AD tenant
+    client_id: 12345678-...             # Azure app client ID
+    client_secret: secret_value         # Azure app client secret
+    allowed_email: user@example.com     # Allowed login email
 
+# === Matrix Messaging ===
+matrix:
+  enabled: true                         # Install and configure Matrix
+  domain: matrix.example.com            # Public domain for Matrix
+  server_name: example.com              # User ID domain (@user:example.com)
+  federation: false                     # Disable federation (private server)
+  registration: token                   # disabled | token | open
+  registration_token: null              # Auto-generated if null and registration=token
+  admin_user: admin                     # First admin username
+  admin_password: null                  # Auto-generated if null
+
+# === Email Notifications ===
+smtp:
+  enabled: true                         # Configure SMTP email
+  sender_email: alerts@example.com      # M365 SMTP sender
+  recipient_email: admin@example.com    # Where alerts go
+  smtp_user: alerts@example.com         # SMTP login (usually same as sender)
+  smtp_password: app_password_here      # M365 app password
+
+# === Security ===
+security:
+  ssh_port: 22                          # SSH port (for firewall rules)
+  fail2ban: true                        # Enable fail2ban
 ```
-runcmd:
-  - /opt/setup-headscale.sh
-  - /opt/install-headplane.sh
-  - /opt/install-matrix.sh          # NEW
+
+### YAML Parsing Approach
+
+**Tool: `yq`** — standalone Go binary (mikefarah/yq)
+
+- Downloaded during cloud-init `bootcmd` or early `runcmd` (before config runs)
+- Static binary, zero runtime dependencies
+- ~20 MB download
+- Added to `versions.conf` with SHA256 checksum verification (matching existing
+  pattern for NVM, Node.js, Headscale)
+
+**Integration with existing `envsubst` pattern:**
+
+The unified config script:
+1. Parses YAML with `yq` to extract values into shell variables
+2. Exports those variables for `envsubst` (same as current headscale-config)
+3. Processes all templates in one pass (Headscale, Headplane, Caddy, Matrix)
+
+This means templates (`.tpl` files) remain unchanged — they still use `${VAR}`
+syntax. The change is upstream: how variables get populated.
+
+```bash
+# Example: extract from YAML into env vars
+HEADSCALE_DOMAIN=$(yq '.headscale.domain' "$CONFIG_FILE")
+AZURE_TENANT_ID=$(yq '.headscale.oidc.tenant_id' "$CONFIG_FILE")
+MATRIX_DOMAIN=$(yq '.matrix.domain' "$CONFIG_FILE")
+# ... etc
+
+# Then existing envsubst pipeline works unchanged
+export HEADSCALE_DOMAIN AZURE_TENANT_ID MATRIX_DOMAIN
+envsubst < template.tpl > output.conf
 ```
 
-The install script handles:
-1. Create `conduit` system user
-2. Download Continuwuity binary (with checksum verification)
-3. Create `/var/lib/matrix-conduit/` data directory
-4. Enable the systemd service (don't start — needs config)
-5. Open firewall port 8448
+### Stdin Pipe Support
 
-### Configuration Flow Integration
+```bash
+# From password manager or file
+cat config.yaml | sudo server-config
 
-A new config script (`/usr/local/bin/matrix-config`) or extension to the existing
-`headscale-config` wizard handles:
-1. Prompt for Matrix domain (default: `matrix.${HEADSCALE_DOMAIN}`)
-2. Prompt for server_name (user ID domain — the base domain or subdomain)
-3. Set registration policy (token-gated or closed)
-4. Generate registration token (if token-gated)
-5. Process Conduit config template via `envsubst`
-6. Process Matrix Caddyfile template
-7. Reload Caddy and start Conduit
-8. Create initial admin user
+# Or directly
+sudo server-config --config config.yaml
 
-### Bot Account Provisioning
+# Or interactive (no stdin, no file)
+sudo server-config
+```
 
-A helper script (`/usr/local/bin/matrix-create-bot`) for the one-time bot account
-setup. Since Conduit has no REST admin API, this script either:
-- **Option A:** Uses `curl` to hit the Matrix client-server registration endpoint
-  (if registration is enabled/token-gated)
-- **Option B:** Prints instructions for the admin to create accounts via the
-  `#admins` room
+Detection logic:
+```bash
+if [ -n "$CONFIG_FILE" ]; then
+  # --config flag provided
+  parse_yaml "$CONFIG_FILE"
+elif [ ! -t 0 ]; then
+  # stdin is not a terminal (piped data)
+  cat > /tmp/server-config-input.yaml
+  parse_yaml /tmp/server-config-input.yaml
+  rm -f /tmp/server-config-input.yaml
+else
+  # interactive mode — prompt for each value
+  prompt_interactive
+fi
+```
 
-For the agent use case, Option A with a registration token is cleanest: the script
-calls the standard Matrix `/register` endpoint with the token.
+### Backward Compatibility
+
+The existing `headscale-config` and `msmtp-config` scripts remain as-is. The new
+`server-config` is an additional unified entry point that calls into the same
+template processing and service restart logic.
+
+Users who already deployed with the old scripts don't need to change anything.
+The YAML config is a new, optional, better path.
+
+### Secret Handling
+
+Secrets in the YAML (passwords, tokens, client secrets) are:
+1. Read from the YAML document
+2. Written to their respective secret files (same paths as today)
+3. Encrypted via `systemd-creds` (same as today via `encrypt_secret_if_supported`)
+4. The original YAML document is NOT stored on the server — it's transient input
+
+The YAML document lives in the user's password manager, not on disk. The
+`server-config` script processes it and discards the input.
 
 ---
 
-## Files to Create (in `write_files/` pattern)
+## 4. Integration Design (Updated)
+
+### File Organization
+
+New files follow the existing `write_files/` pattern. New files use `server-*`
+naming; existing files keep `headscale-*` naming.
 
 ### New Files
 
-| Repo path | Target path | Permissions | Purpose |
-|-----------|-------------|-------------|---------|
-| `write_files/opt/install-matrix.sh` | `/opt/install-matrix.sh` | 0755 | Install script (binary download, user creation, firewall) |
-| `write_files/usr/local/bin/matrix-config` | `/usr/local/bin/matrix-config` | 0755 | Post-deploy config wizard |
+| Repo path | Target path | Perms | Purpose |
+|-----------|-------------|-------|---------|
+| `write_files/opt/install-matrix.sh` | `/opt/install-matrix.sh` | 0755 | Matrix install (binary, user, dirs) |
+| `write_files/opt/install-yq.sh` | `/opt/install-yq.sh` | 0755 | yq binary install with checksum |
+| `write_files/usr/local/bin/server-config` | `/usr/local/bin/server-config` | 0755 | Unified YAML config wizard |
 | `write_files/usr/local/bin/matrix-create-bot` | `/usr/local/bin/matrix-create-bot` | 0755 | Bot account creation helper |
 | `write_files/etc/matrix-conduit/conduit.toml.tpl` | `/etc/matrix-conduit/conduit.toml.tpl` | 0644 | Conduit config template |
 | `write_files/etc/headscale/templates/Caddyfile-matrix.tpl` | `/etc/headscale/templates/Caddyfile-matrix.tpl` | 0644 | Matrix Caddy config template |
 | `write_files/etc/systemd/system/conduit.service` | `/etc/systemd/system/conduit.service` | 0644 | Systemd unit (hardened) |
-| `write_files/etc/fail2ban/filter.d/matrix-auth.conf` | `/etc/fail2ban/filter.d/matrix-auth.conf` | 0644 | Fail2ban filter for Matrix auth |
+| `write_files/etc/fail2ban/filter.d/matrix-auth.conf` | `/etc/fail2ban/filter.d/matrix-auth.conf` | 0644 | Fail2ban filter for Matrix |
 | `write_files/etc/fail2ban/jail.d/matrix.conf` | `/etc/fail2ban/jail.d/matrix.conf` | 0644 | Fail2ban jail for Matrix |
-| `write_files/etc/logrotate.d/matrix` | `/etc/logrotate.d/matrix` | 0644 | Log rotation config |
+| `write_files/etc/logrotate.d/matrix` | `/etc/logrotate.d/matrix` | 0644 | Log rotation |
+| `config.yaml.example` | (repo root) | — | Example YAML config for docs |
 
 ### Modified Files
 
 | Repo path | Change |
 |-----------|--------|
-| `write_files.yaml` | Add entries for all new files above |
-| `cloud-init.yml` | Add `/opt/install-matrix.sh` to `runcmd` |
-| `write_files/etc/headscale/versions.conf` | Add `CONDUIT_VERSION` and `CONDUIT_SHA256` |
-| `write_files/etc/headscale/constants.conf` | Add Matrix-related constants |
-| `write_files/usr/local/bin/headscale-healthcheck` | Add Conduit health check |
-| `README.md` | Document Matrix server setup |
+| `write_files.yaml` | Add entries for all new files |
+| `cloud-init.yml` | Add `install-yq.sh` and `install-matrix.sh` to `runcmd` |
+| `write_files/etc/headscale/versions.conf` | Add `CONDUIT_VERSION`, `CONDUIT_SHA256`, `YQ_VERSION`, `YQ_SHA256` |
+| `write_files/etc/headscale/constants.conf` | Add Matrix constants |
+| `write_files/usr/local/bin/headscale-healthcheck` | Add Conduit service/API checks |
+| `README.md` | Update identity, add Matrix docs, add YAML config docs |
+| `setup.sh` | Update to reference `server-config` as the new entry point |
 
-### Minimal `cloud-init.yml` Change
-
-Only one line added to `runcmd`:
+### cloud-init.yml Changes (Minimal)
 
 ```yaml
 runcmd:
   - /opt/setup-headscale.sh
   - /opt/install-headplane.sh
-  - /opt/install-matrix.sh          # NEW
+  - /opt/install-yq.sh              # NEW — yq for YAML parsing
+  - /opt/install-matrix.sh          # NEW — Matrix/Conduit setup
+```
+
+Two lines added. Everything else goes through `write_files/`.
+
+### Config Flow (New Unified Path)
+
+```
+User's password manager
+    │
+    ▼
+config.yaml (piped via stdin or --config flag)
+    │
+    ▼
+server-config (parses YAML with yq)
+    │
+    ├── Extracts Headscale vars ──→ envsubst ──→ headscale.yaml, headplane.yaml
+    ├── Extracts Matrix vars ────→ envsubst ──→ conduit.toml
+    ├── Extracts SMTP vars ──────→ writes msmtprc, aliases
+    ├── Extracts Caddy vars ─────→ envsubst ──→ Caddyfile (merged)
+    ├── Writes secrets ──────────→ encrypt_secret_if_supported()
+    └── Restarts services ───────→ systemctl restart headscale caddy conduit
+```
+
+### Config Flow (Legacy Interactive Path — Preserved)
+
+```
+sudo headscale-config     # Still works — prompts for Headscale/OIDC
+sudo msmtp-config         # Still works — prompts for SMTP
+sudo server-config        # New — interactive mode if no stdin/file
 ```
 
 ---
 
-## Conduit Configuration Template
+## 5. Conduit Configuration (Updated)
+
+### Config Template
 
 `/etc/matrix-conduit/conduit.toml.tpl`:
 
@@ -244,18 +354,14 @@ database_backend = "rocksdb"
 port = 6167
 address = "127.0.0.1"
 max_request_size = 20_000_000
-allow_registration = false
+allow_registration = ${MATRIX_ALLOW_REGISTRATION}
 registration_token = "${MATRIX_REGISTRATION_TOKEN}"
-allow_federation = true
+allow_federation = ${MATRIX_FEDERATION}
 trusted_servers = ["matrix.org"]
 log = "warn"
 ```
 
----
-
-## Systemd Service (Hardened)
-
-Following the repo's existing hardening patterns from `headscale.service`:
+### Systemd Service (Hardened)
 
 ```ini
 [Unit]
@@ -271,12 +377,10 @@ Environment=CONDUIT_CONFIG=/etc/matrix-conduit/conduit.toml
 ExecStart=/usr/local/bin/matrix-conduit
 Restart=always
 RestartSec=5
-
-# Logging
 StandardOutput=append:/var/log/matrix-conduit/conduit.log
 StandardError=append:/var/log/matrix-conduit/conduit.log
 
-# Hardening (matches headscale.service pattern)
+# Hardening (matches headscale.service)
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
@@ -301,24 +405,126 @@ ProtectHostname=true
 WantedBy=multi-user.target
 ```
 
+### Caddy Template for Matrix
+
+`/etc/headscale/templates/Caddyfile-matrix.tpl`:
+
+```caddyfile
+# Matrix homeserver reverse proxy
+${MATRIX_DOMAIN} {
+    encode gzip
+
+    # Matrix Client-Server API
+    handle /_matrix/* {
+        reverse_proxy 127.0.0.1:6167
+    }
+
+    # Well-known for client discovery (if server_name differs from domain)
+    handle /.well-known/matrix/client {
+        respond `{"m.homeserver":{"base_url":"https://${MATRIX_DOMAIN}"}}` 200 {
+            header Content-Type application/json
+            header Access-Control-Allow-Origin *
+        }
+    }
+
+    # Well-known for federation discovery
+    handle /.well-known/matrix/server {
+        respond `{"m.server":"${MATRIX_DOMAIN}:443"}` 200 {
+            header Content-Type application/json
+        }
+    }
+
+    log {
+        output file /var/log/caddy/matrix-access.log {
+            roll_size 10mb
+            roll_keep 5
+        }
+        format json
+    }
+}
+```
+
+When federation is enabled, an additional block for `:8448` is added dynamically
+by `server-config`.
+
 ---
 
-## Open Questions for User
+## 6. Networking (Updated)
 
-1. **User ID format:** `@user:example.com` (requires well-known delegation on
-   base domain) vs `@user:matrix.example.com` (simpler, self-contained)?
+| Port | Protocol | Purpose | Default |
+|------|----------|---------|---------|
+| 443 | TCP | HTTPS (Headscale + Matrix client API via Caddy) | Open |
+| 8448 | TCP | Matrix federation | **Closed** (opened when `matrix.federation: true`) |
+| 22 | TCP | SSH | Open |
+| 80 | TCP | HTTP → HTTPS redirect | Open |
+| 3478 | UDP | STUN (DERP) | Open |
 
-2. **Matrix domain:** Should the Matrix server be at `matrix.<headscale-domain>`
-   (e.g., `matrix.vpn.example.com`), or a different subdomain?
+---
 
-3. **Registration policy:** Token-gated (generates a one-time token for bot
-   account creation) or fully closed (admin creates accounts via admin room)?
+## 7. Bot Account Creation
 
-4. **Federation:** Enable federation with public Matrix network, or keep it
-   private/closed?
+Since Conduit lacks a REST admin API, bot account creation uses the standard Matrix
+Client-Server `/register` endpoint with a registration token:
 
-5. **Separate config wizard:** Should `matrix-config` be a standalone script, or
-   should it be integrated into the existing `headscale-config` wizard?
+```bash
+#!/usr/bin/env bash
+# matrix-create-bot — Create a Matrix bot account using registration token
+
+HOMESERVER_URL="https://${MATRIX_DOMAIN}"
+TOKEN="${MATRIX_REGISTRATION_TOKEN}"
+USERNAME="$1"
+PASSWORD="$2"
+
+# Standard Matrix C-S API registration with token
+curl -fsSL -X POST \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"auth\": {
+      \"type\": \"m.login.registration_token\",
+      \"token\": \"${TOKEN}\",
+      \"session\": \"\"
+    },
+    \"username\": \"${USERNAME}\",
+    \"password\": \"${PASSWORD}\"
+  }" \
+  "${HOMESERVER_URL}/_matrix/client/v3/register"
+```
+
+This works regardless of whether registration is set to `token` or `open`. If
+registration is `disabled`, bot accounts must be created via the admin room.
+
+---
+
+## Open Questions (Resolved)
+
+| Question | Resolution |
+|----------|-----------|
+| User ID format | Configurable via `matrix.server_name` in YAML |
+| Matrix domain | Configurable via `matrix.domain` in YAML |
+| Registration policy | Configurable; default `token` |
+| Federation | Default `false` (private); configurable |
+| Separate vs unified config wizard | Unified `server-config` |
+| Base domain control | User's responsibility; YAML accepts any domain |
+
+---
+
+## Scope Boundary for This PR
+
+### In Scope
+- Matrix homeserver (Conduit/Continuwuity) installation and configuration
+- Unified `server-config` script with YAML stdin support
+- `yq` binary installation for YAML parsing
+- Updated README with multi-service identity
+- Example `config.yaml.example` in repo root
+- Fail2ban, logrotate, healthcheck for Matrix
+- Bot account creation helper
+
+### Out of Scope (Future PRs)
+- Full `headscale-*` → generic rename of existing scripts/paths
+- GitHub repo rename
+- Renaming `/etc/headscale/` filesystem paths
+- Deleting legacy `headscale-config` / `msmtp-config` (they remain for backward
+  compatibility)
 
 ---
 
@@ -326,11 +532,10 @@ WantedBy=multi-user.target
 
 - Continuwuity: https://forgejo.ellis.link/continuwuation/continuwuity
 - Conduit deployment docs: https://docs.conduit.rs/deploying/generic.html
-- Caddy config for Conduit: https://tomfos.tr/matrix/continuwuity/reverse-proxies/caddy/
+- mikefarah/yq: https://github.com/mikefarah/yq
+- Matrix C-S API /register: https://spec.matrix.org/v1.13/client-server-api/#post_matrixclientv3register
 - Agents repo Issue #44: Matrix communication support
-- Matrix federation tester: https://federationtester.matrix.org/
-- Matrix Client-Server spec: https://spec.matrix.org/unstable/client-server-api/
 
 ---
 
-**Status**: Rule 0 — Discovery complete. Ready for Rule 1 planning.
+**Status**: Rule 6 — Discovery complete (feedback iteration 1). Ready for gate review.

@@ -1,19 +1,21 @@
-# PLAN: Add Matrix Homeserver (Conduit) to Headscale VPS
+# PLAN: Coordination & Relay Server — Matrix + Unified Config
 
 ## Overview
 
-Add a Matrix homeserver (Continuwuity/Conduit-family) to the existing Headscale-VPS
-deployment. Follows the existing `write_files/` + setup script pattern with minimal
-`cloud-init.yml` changes.
+Expand Headscale-VPS into a multi-service Coordination & Relay Server:
+1. Add Matrix homeserver (Conduit/Continuwuity)
+2. Add unified YAML-driven `server-config` wizard (replaces per-service wizards)
+3. Add `yq` for YAML parsing
+4. Update documentation and identity
 
 ## Commits
 
 <!-- ANNOTATIONS:START -->
 <!-- ANNOTATIONS:END -->
 
-### Commit 1: `write_files/etc/headscale/versions.conf` - Add CONDUIT_VERSION and CONDUIT_SHA256 variables for Continuwuity binary pinning. Follows existing pattern for Headscale/Headplane version pinning.
+### Commit 1: `write_files/etc/headscale/versions.conf` - Add CONDUIT_VERSION, CONDUIT_SHA256, YQ_VERSION, and YQ_SHA256 for Continuwuity binary and yq YAML parser pinning.
 
-### write_files.etc.headscale.versions.conduit-version-config
+### write_files.etc.headscale.versions.conduit-yq-versions
 
 > **File**: `write_files/etc/headscale/versions.conf`
 > **Type**: MODIFIED
@@ -21,7 +23,7 @@ deployment. Follows the existing `write_files/` + setup script pattern with mini
 
 #### Description
 
-Add CONDUIT_VERSION and CONDUIT_SHA256 variables for Continuwuity binary pinning. Follows existing pattern for Headscale/Headplane version pinning.
+Add CONDUIT_VERSION, CONDUIT_SHA256, YQ_VERSION, and YQ_SHA256 for Continuwuity binary and yq YAML parser pinning.
 
 #### Diff
 
@@ -39,7 +41,7 @@ placeholder
 | **Rule 3: Exempt** | N/A | N/A |
 | **Rule 4: Atomic** | Single logical unit | YES |
 
-### Commit 2: `write_files/etc/headscale/constants.conf` - Add Matrix-related constants: CONDUIT_LISTEN_PORT, MATRIX_LOG_SIZE, MATRIX_LOG_KEEP. Follows existing constants pattern.
+### Commit 2: `write_files/etc/headscale/constants.conf` - Add Matrix-related constants: CONDUIT_LISTEN_PORT (6167), Matrix log rotation settings.
 
 ### write_files.etc.headscale.constants.matrix-constants
 
@@ -49,7 +51,7 @@ placeholder
 
 #### Description
 
-Add Matrix-related constants: CONDUIT_LISTEN_PORT, MATRIX_LOG_SIZE, MATRIX_LOG_KEEP. Follows existing constants pattern.
+Add Matrix-related constants: CONDUIT_LISTEN_PORT (6167), Matrix log rotation settings.
 
 #### Diff
 
@@ -67,7 +69,7 @@ placeholder
 | **Rule 3: Exempt** | N/A | N/A |
 | **Rule 4: Atomic** | Single logical unit | YES |
 
-### Commit 3: `write_files/etc/matrix-conduit/conduit.toml.tpl` - Conduit homeserver configuration template. Uses envsubst variables for MATRIX_SERVER_NAME and MATRIX_REGISTRATION_TOKEN. Binds to 127.0.0.1:6167 behind Caddy.
+### Commit 3: `write_files/etc/matrix-conduit/conduit.toml.tpl` - Conduit homeserver config template with envsubst variables: MATRIX_SERVER_NAME, MATRIX_REGISTRATION_TOKEN, MATRIX_ALLOW_REGISTRATION, MATRIX_FEDERATION. Binds 127.0.0.1:6167.
 
 ### write_files.etc.matrix-conduit.conduit.toml.conduit-config-template
 
@@ -77,7 +79,7 @@ placeholder
 
 #### Description
 
-Conduit homeserver configuration template. Uses envsubst variables for MATRIX_SERVER_NAME and MATRIX_REGISTRATION_TOKEN. Binds to 127.0.0.1:6167 behind Caddy.
+Conduit homeserver config template with envsubst variables: MATRIX_SERVER_NAME, MATRIX_REGISTRATION_TOKEN, MATRIX_ALLOW_REGISTRATION, MATRIX_FEDERATION. Binds 127.0.0.1:6167.
 
 #### Diff
 
@@ -95,7 +97,7 @@ placeholder
 | **Rule 3: Exempt** | N/A | N/A |
 | **Rule 4: Atomic** | Single logical unit | YES |
 
-### Commit 4: `write_files/etc/systemd/system/conduit.service` - Systemd service unit for Conduit with full hardening (NoNewPrivileges, ProtectSystem=strict, SystemCallFilter, etc.). Matches existing headscale.service hardening pattern.
+### Commit 4: `write_files/etc/systemd/system/conduit.service` - Hardened systemd service unit for Conduit. Matches headscale.service hardening pattern: NoNewPrivileges, ProtectSystem=strict, SystemCallFilter, MemoryDenyWriteExecute.
 
 ### write_files.etc.systemd.system.conduit.conduit-systemd-unit
 
@@ -105,7 +107,7 @@ placeholder
 
 #### Description
 
-Systemd service unit for Conduit with full hardening (NoNewPrivileges, ProtectSystem=strict, SystemCallFilter, etc.). Matches existing headscale.service hardening pattern.
+Hardened systemd service unit for Conduit. Matches headscale.service hardening pattern: NoNewPrivileges, ProtectSystem=strict, SystemCallFilter, MemoryDenyWriteExecute.
 
 #### Diff
 
@@ -123,7 +125,7 @@ placeholder
 | **Rule 3: Exempt** | N/A | N/A |
 | **Rule 4: Atomic** | Single logical unit | YES |
 
-### Commit 5: `write_files/etc/headscale/templates/Caddyfile-matrix.tpl` - Caddy reverse proxy template for Matrix. Handles client-server API (/_matrix/*), federation port 8448, and well-known delegation endpoints. Uses envsubst variables.
+### Commit 5: `write_files/etc/headscale/templates/Caddyfile-matrix.tpl` - Caddy reverse proxy template for Matrix: /_matrix/* proxy to :6167, well-known client/server discovery endpoints, JSON access logging.
 
 ### write_files.etc.headscale.templates.Caddyfile-matrix.caddy-matrix-template
 
@@ -133,7 +135,7 @@ placeholder
 
 #### Description
 
-Caddy reverse proxy template for Matrix. Handles client-server API (/_matrix/*), federation port 8448, and well-known delegation endpoints. Uses envsubst variables.
+Caddy reverse proxy template for Matrix: /_matrix/* proxy to :6167, well-known client/server discovery endpoints, JSON access logging.
 
 #### Diff
 
@@ -151,7 +153,7 @@ placeholder
 | **Rule 3: Exempt** | N/A | N/A |
 | **Rule 4: Atomic** | Single logical unit | YES |
 
-### Commit 6: `write_files/opt/install-matrix.sh` - Install script for Conduit/Continuwuity. Creates conduit user, downloads binary with SHA256 verification, creates directories, opens UFW port 8448, enables systemd service. Follows setup-headscale.sh patterns.
+### Commit 6: `write_files/opt/install-matrix.sh` - Matrix install script: creates conduit user, downloads Continuwuity binary with SHA256 verification, creates data/log dirs, enables systemd service. Does NOT open port 8448 (federation off by default).
 
 ### write_files.opt.install-matrix.matrix-install-script
 
@@ -161,7 +163,7 @@ placeholder
 
 #### Description
 
-Install script for Conduit/Continuwuity. Creates conduit user, downloads binary with SHA256 verification, creates directories, opens UFW port 8448, enables systemd service. Follows setup-headscale.sh patterns.
+Matrix install script: creates conduit user, downloads Continuwuity binary with SHA256 verification, creates data/log dirs, enables systemd service. Does NOT open port 8448 (federation off by default).
 
 #### Diff
 
@@ -179,17 +181,17 @@ placeholder
 | **Rule 3: Exempt** | N/A | N/A |
 | **Rule 4: Atomic** | Single logical unit | YES |
 
-### Commit 7: `write_files/usr/local/bin/matrix-config` - Post-deploy configuration wizard for Matrix. Prompts for Matrix domain, server_name, and registration token. Processes conduit.toml.tpl and Caddyfile-matrix.tpl via envsubst. Reloads Caddy and starts Conduit. Uses shared headscale-common.sh library.
+### Commit 7: `write_files/opt/install-yq.sh` - yq install script: downloads mikefarah/yq Go binary with SHA256 verification, installs to /usr/local/bin/yq. Required for YAML config parsing in server-config.
 
-### write_files.usr.local.bin.matrix-config-wizard
+### write_files.opt.install-yq.yq-install-script
 
-> **File**: `write_files/usr/local/bin/matrix-config`
+> **File**: `write_files/opt/install-yq.sh`
 > **Type**: NEW
 > **Commit**: 1 of 1 for this file
 
 #### Description
 
-Post-deploy configuration wizard for Matrix. Prompts for Matrix domain, server_name, and registration token. Processes conduit.toml.tpl and Caddyfile-matrix.tpl via envsubst. Reloads Caddy and starts Conduit. Uses shared headscale-common.sh library.
+yq install script: downloads mikefarah/yq Go binary with SHA256 verification, installs to /usr/local/bin/yq. Required for YAML config parsing in server-config.
 
 #### Diff
 
@@ -207,7 +209,35 @@ placeholder
 | **Rule 3: Exempt** | N/A | N/A |
 | **Rule 4: Atomic** | Single logical unit | YES |
 
-### Commit 8: `write_files/usr/local/bin/matrix-create-bot` - Helper script for creating Matrix bot accounts. Uses the standard Matrix client-server /register endpoint with a registration token. Outputs the access token for bot configuration.
+### Commit 8: `write_files/usr/local/bin/server-config` - Unified YAML-driven config wizard. Accepts config via stdin pipe, --config file, or interactive prompts. Parses YAML with yq, extracts all service vars, processes templates via envsubst, writes secrets, restarts services. Covers Headscale, Matrix, SMTP, and security config in one pass.
+
+### write_files.usr.local.bin.unified-config-wizard
+
+> **File**: `write_files/usr/local/bin/server-config`
+> **Type**: NEW
+> **Commit**: 1 of 1 for this file
+
+#### Description
+
+Unified YAML-driven config wizard. Accepts config via stdin pipe, --config file, or interactive prompts. Parses YAML with yq, extracts all service vars, processes templates via envsubst, writes secrets, restarts services. Covers Headscale, Matrix, SMTP, and security config in one pass.
+
+#### Diff
+
+```diff
+placeholder
+```
+
+#### Rule Compliance
+
+> See Operating Procedures for Rules 3-4
+
+| Rule | Check | Status |
+|------|-------|--------|
+| **Rule 3: Lines** | 0 lines | PASS |
+| **Rule 3: Exempt** | N/A | N/A |
+| **Rule 4: Atomic** | Single logical unit | YES |
+
+### Commit 9: `write_files/usr/local/bin/matrix-create-bot` - Bot account creation helper using Matrix C-S API /register with registration token. Usage: matrix-create-bot <username> <password>. Outputs access token.
 
 ### write_files.usr.local.bin.matrix-bot-creator
 
@@ -217,7 +247,7 @@ placeholder
 
 #### Description
 
-Helper script for creating Matrix bot accounts. Uses the standard Matrix client-server /register endpoint with a registration token. Outputs the access token for bot configuration.
+Bot account creation helper using Matrix C-S API /register with registration token. Usage: matrix-create-bot <username> <password>. Outputs access token.
 
 #### Diff
 
@@ -235,7 +265,7 @@ placeholder
 | **Rule 3: Exempt** | N/A | N/A |
 | **Rule 4: Atomic** | Single logical unit | YES |
 
-### Commit 9: `write_files/etc/fail2ban/filter.d/matrix-auth.conf` - Fail2ban filter for Matrix authentication failures. Matches Conduit log patterns for failed login attempts.
+### Commit 10: `write_files/etc/fail2ban/filter.d/matrix-auth.conf` - Fail2ban filter for Matrix/Conduit authentication failures. Matches Conduit log patterns for failed login attempts.
 
 ### write_files.etc.fail2ban.filter.d.matrix-auth.matrix-fail2ban-filter
 
@@ -245,7 +275,7 @@ placeholder
 
 #### Description
 
-Fail2ban filter for Matrix authentication failures. Matches Conduit log patterns for failed login attempts.
+Fail2ban filter for Matrix/Conduit authentication failures. Matches Conduit log patterns for failed login attempts.
 
 #### Diff
 
@@ -263,7 +293,7 @@ placeholder
 | **Rule 3: Exempt** | N/A | N/A |
 | **Rule 4: Atomic** | Single logical unit | YES |
 
-### Commit 10: `write_files/etc/fail2ban/jail.d/matrix.conf` - Fail2ban jail for Matrix authentication. 5 attempts, 12h ban (matches existing OIDC jail settings).
+### Commit 11: `write_files/etc/fail2ban/jail.d/matrix.conf` - Fail2ban jail for Matrix auth: 5 attempts, 12h ban. Matches existing OIDC jail settings from constants.conf.
 
 ### write_files.etc.fail2ban.jail.d.matrix.matrix-fail2ban-jail
 
@@ -273,7 +303,7 @@ placeholder
 
 #### Description
 
-Fail2ban jail for Matrix authentication. 5 attempts, 12h ban (matches existing OIDC jail settings).
+Fail2ban jail for Matrix auth: 5 attempts, 12h ban. Matches existing OIDC jail settings from constants.conf.
 
 #### Diff
 
@@ -291,7 +321,7 @@ placeholder
 | **Rule 3: Exempt** | N/A | N/A |
 | **Rule 4: Atomic** | Single logical unit | YES |
 
-### Commit 11: `write_files/etc/logrotate.d/matrix` - Log rotation config for /var/log/matrix-conduit/conduit.log. Daily rotation, 7 days retention, matches existing headscale logrotate pattern.
+### Commit 12: `write_files/etc/logrotate.d/matrix` - Log rotation for /var/log/matrix-conduit/conduit.log. Daily rotation, 7 days retention, matches headscale logrotate pattern.
 
 ### write_files.etc.logrotate.d.matrix-logrotate
 
@@ -301,7 +331,7 @@ placeholder
 
 #### Description
 
-Log rotation config for /var/log/matrix-conduit/conduit.log. Daily rotation, 7 days retention, matches existing headscale logrotate pattern.
+Log rotation for /var/log/matrix-conduit/conduit.log. Daily rotation, 7 days retention, matches headscale logrotate pattern.
 
 #### Diff
 
@@ -319,9 +349,37 @@ placeholder
 | **Rule 3: Exempt** | N/A | N/A |
 | **Rule 4: Atomic** | Single logical unit | YES |
 
-### Commit 12: `write_files.yaml` - Add write_files.yaml entries for all new Matrix files: conduit.toml.tpl, conduit.service, Caddyfile-matrix.tpl, install-matrix.sh, matrix-config, matrix-create-bot, fail2ban filter/jail, logrotate.
+### Commit 13: `config.yaml.example` - Example YAML config document for server-config. Includes all configurable fields with comments: headscale (domain, OIDC), matrix (domain, server_name, federation, registration), smtp (sender, recipient, password), security settings. Users store this in their password manager.
 
-### write_files.manifest-matrix-entries
+### config.yaml.example-yaml-config
+
+> **File**: `config.yaml.example`
+> **Type**: NEW
+> **Commit**: 1 of 1 for this file
+
+#### Description
+
+Example YAML config document for server-config. Includes all configurable fields with comments: headscale (domain, OIDC), matrix (domain, server_name, federation, registration), smtp (sender, recipient, password), security settings. Users store this in their password manager.
+
+#### Diff
+
+```diff
+placeholder
+```
+
+#### Rule Compliance
+
+> See Operating Procedures for Rules 3-4
+
+| Rule | Check | Status |
+|------|-------|--------|
+| **Rule 3: Lines** | 0 lines | PASS |
+| **Rule 3: Exempt** | N/A | N/A |
+| **Rule 4: Atomic** | Single logical unit | YES |
+
+### Commit 14: `write_files.yaml` - Add write_files.yaml entries for all new files: conduit.toml.tpl, conduit.service, Caddyfile-matrix.tpl, install-matrix.sh, install-yq.sh, server-config, matrix-create-bot, fail2ban filter/jail, logrotate.
+
+### write_files.manifest-new-entries
 
 > **File**: `write_files.yaml`
 > **Type**: MODIFIED
@@ -329,7 +387,7 @@ placeholder
 
 #### Description
 
-Add write_files.yaml entries for all new Matrix files: conduit.toml.tpl, conduit.service, Caddyfile-matrix.tpl, install-matrix.sh, matrix-config, matrix-create-bot, fail2ban filter/jail, logrotate.
+Add write_files.yaml entries for all new files: conduit.toml.tpl, conduit.service, Caddyfile-matrix.tpl, install-matrix.sh, install-yq.sh, server-config, matrix-create-bot, fail2ban filter/jail, logrotate.
 
 #### Diff
 
@@ -347,9 +405,9 @@ placeholder
 | **Rule 3: Exempt** | N/A | N/A |
 | **Rule 4: Atomic** | Single logical unit | YES |
 
-### Commit 13: `cloud-init.yml` - Add single line to runcmd: /opt/install-matrix.sh. This is the only change to cloud-init.yml.
+### Commit 15: `cloud-init.yml` - Add two lines to runcmd: /opt/install-yq.sh and /opt/install-matrix.sh. Minimal change to cloud-init.yml.
 
-### cloud-init.runcmd-matrix-install
+### cloud-init.runcmd-new-scripts
 
 > **File**: `cloud-init.yml`
 > **Type**: MODIFIED
@@ -357,7 +415,7 @@ placeholder
 
 #### Description
 
-Add single line to runcmd: /opt/install-matrix.sh. This is the only change to cloud-init.yml.
+Add two lines to runcmd: /opt/install-yq.sh and /opt/install-matrix.sh. Minimal change to cloud-init.yml.
 
 #### Diff
 
@@ -375,7 +433,7 @@ placeholder
 | **Rule 3: Exempt** | N/A | N/A |
 | **Rule 4: Atomic** | Single logical unit | YES |
 
-### Commit 14: `write_files/usr/local/bin/headscale-healthcheck` - Add Conduit health check to existing healthcheck script. Checks systemd service status and Matrix client-server API responsiveness (GET /_matrix/client/versions).
+### Commit 16: `write_files/usr/local/bin/headscale-healthcheck` - Add Conduit health checks: systemd service status, Matrix C-S API responsiveness (GET /_matrix/client/versions on localhost:6167), port 6167 listening.
 
 ### write_files.usr.local.bin.healthcheck-matrix
 
@@ -385,7 +443,7 @@ placeholder
 
 #### Description
 
-Add Conduit health check to existing healthcheck script. Checks systemd service status and Matrix client-server API responsiveness (GET /_matrix/client/versions).
+Add Conduit health checks: systemd service status, Matrix C-S API responsiveness (GET /_matrix/client/versions on localhost:6167), port 6167 listening.
 
 #### Diff
 
@@ -403,9 +461,37 @@ placeholder
 | **Rule 3: Exempt** | N/A | N/A |
 | **Rule 4: Atomic** | Single logical unit | YES |
 
-### Commit 15: `README.md` - Add Matrix server section to README: architecture diagram update, Matrix endpoints, post-deploy matrix-config instructions, bot account creation, troubleshooting.
+### Commit 17: `setup.sh` - Update manual setup instructions to reference server-config as the new unified entry point alongside legacy headscale-config.
 
-### README.readme-matrix-docs
+### setup.setup-server-config-ref
+
+> **File**: `setup.sh`
+> **Type**: MODIFIED
+> **Commit**: 1 of 1 for this file
+
+#### Description
+
+Update manual setup instructions to reference server-config as the new unified entry point alongside legacy headscale-config.
+
+#### Diff
+
+```diff
+placeholder
+```
+
+#### Rule Compliance
+
+> See Operating Procedures for Rules 3-4
+
+| Rule | Check | Status |
+|------|-------|--------|
+| **Rule 3: Lines** | 0 lines | PASS |
+| **Rule 3: Exempt** | N/A | N/A |
+| **Rule 4: Atomic** | Single logical unit | YES |
+
+### Commit 18: `README.md` - Update README: rename identity to Coordination and Relay Server, add Matrix section, document unified YAML config (server-config), update architecture diagram with Matrix endpoints, add config.yaml.example reference, bot account creation docs.
+
+### README.readme-multi-service
 
 > **File**: `README.md`
 > **Type**: MODIFIED
@@ -413,7 +499,7 @@ placeholder
 
 #### Description
 
-Add Matrix server section to README: architecture diagram update, Matrix endpoints, post-deploy matrix-config instructions, bot account creation, troubleshooting.
+Update README: rename identity to Coordination and Relay Server, add Matrix section, document unified YAML config (server-config), update architecture diagram with Matrix endpoints, add config.yaml.example reference, bot account creation docs.
 
 #### Diff
 
