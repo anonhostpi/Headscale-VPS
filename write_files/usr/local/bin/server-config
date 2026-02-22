@@ -15,3 +15,23 @@ CONFIG_FILE=""
 while [[ $# -gt 0 ]]; do
   case $1 in --config) CONFIG_FILE="$2"; shift 2 ;; *) shift ;; esac
 done
+
+# Parse YAML config using yq and export variables
+parse_yaml() {
+  local yaml_file="$1"
+  HEADSCALE_DOMAIN=$(yq '.headscale.domain' "$yaml_file")
+  AZURE_TENANT_ID=$(yq '.headscale.oidc.tenant_id' "$yaml_file")
+  AZURE_CLIENT_ID=$(yq '.headscale.oidc.client_id' "$yaml_file")
+  AZURE_CLIENT_SECRET=$(yq '.headscale.oidc.client_secret' "$yaml_file")
+  ALLOWED_EMAIL=$(yq '.headscale.oidc.allowed_email' "$yaml_file")
+  MATRIX_ENABLED=$(yq '.matrix.enabled // "false"' "$yaml_file")
+  MATRIX_DOMAIN=$(yq '.matrix.domain' "$yaml_file")
+  MATRIX_SERVER_NAME=$(yq '.matrix.server_name' "$yaml_file")
+  MATRIX_FEDERATION=$(yq '.matrix.federation // "false"' "$yaml_file")
+  MATRIX_ALLOW_REGISTRATION=$(yq '.matrix.registration != "disabled"' "$yaml_file")
+  MATRIX_REGISTRATION_TOKEN=$(yq '.matrix.registration_token // ""' "$yaml_file")
+  SMTP_SENDER=$(yq '.smtp.sender_email' "$yaml_file")
+  SMTP_RECIPIENT=$(yq '.smtp.recipient_email' "$yaml_file")
+  SMTP_USER=$(yq '.smtp.smtp_user' "$yaml_file")
+  SMTP_PASSWORD=$(yq '.smtp.smtp_password' "$yaml_file")
+}
