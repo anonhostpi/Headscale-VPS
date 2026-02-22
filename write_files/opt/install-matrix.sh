@@ -40,3 +40,20 @@ if [ -n "$CONDUIT_SHA256" ]; then
   }
   echo "    Checksum verified: OK"
 fi
+
+# Install binary and enable service
+echo "[4/5] Installing Conduit binary..."
+install -m 0755 /tmp/matrix-conduit /usr/local/bin/matrix-conduit
+rm -f /tmp/matrix-conduit
+
+echo "[5/5] Enabling Conduit service..."
+systemctl daemon-reload
+systemctl enable conduit
+
+echo ""
+echo "=========================================="
+echo "  Conduit Installation Complete"
+echo "=========================================="
+echo ""
+echo "  Run 'sudo server-config' to configure Matrix."
+echo ""
