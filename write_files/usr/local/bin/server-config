@@ -90,3 +90,13 @@ load_config() {
     exec /usr/local/bin/relay-config
   fi
 }
+
+print_banner "Relay Server Configuration"
+load_config
+write_env_file
+process_templates
+print_success "Configuration applied"
+
+systemctl restart headscale caddy 2>/dev/null || true
+[ "${MATRIX_ENABLED:-false}" = "true" ] && systemctl restart conduit 2>/dev/null || true
+print_success "Services restarted"
