@@ -73,3 +73,21 @@
   permissions: "0755"
 - path: /usr/local/bin/relay-user-setup
   permissions: "0755"
+- path: /usr/local/bin/server-config
+  permissions: "0755"
+- path: /usr/local/bin/matrix-create-bot
+  permissions: "0755"
+- path: /opt/install-yq.sh
+  permissions: "0755"
+- path: /opt/install-matrix.sh
+  permissions: "0755"
+- path: /etc/systemd/system/conduit.service
+  permissions: "0644"
+- path: /etc/relay-server/templates/Caddyfile-matrix.tpl
+  permissions: "0644"
+- path: /etc/matrix-conduit/conduit.toml.tpl
+  permissions: "0644"
+- path: /etc/fail2ban/filter.d/matrix-auth.conf
+  permissions: "0644"
+- path: /etc/fail2ban/jail.d/matrix.conf
+  permissions: "0644"
