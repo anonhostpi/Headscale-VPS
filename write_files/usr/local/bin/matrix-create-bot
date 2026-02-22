@@ -17,3 +17,19 @@ if [ -z "$MATRIX_DOMAIN" ] || [ -z "$MATRIX_REGISTRATION_TOKEN" ]; then
   echo "ERROR: MATRIX_DOMAIN and MATRIX_REGISTRATION_TOKEN must be set in $ENV_FILE"
   exit 1
 fi
+
+curl -fsSL -X POST \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"auth\": {
+      \"type\": \"m.login.registration_token\",
+      \"token\": \"${MATRIX_REGISTRATION_TOKEN}\",
+      \"session\": \"\"
+    },
+    \"username\": \"${USERNAME}\",
+    \"password\": \"${PASSWORD}\"
+  }" \
+  "https://${MATRIX_DOMAIN}/_matrix/client/v3/register"
+
+echo ""
+echo "Bot account '${USERNAME}' created successfully."
