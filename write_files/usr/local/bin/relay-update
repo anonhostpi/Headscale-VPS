@@ -145,8 +145,8 @@ main() {
   log "=========================================="
 
   # Load version configuration
-  if [ -f /etc/headscale/versions.conf ]; then
-    source /etc/headscale/versions.conf
+  if [ -f /etc/relay-server/versions.conf ]; then
+    source /etc/relay-server/versions.conf
   fi
 
   REPORT=""
@@ -212,8 +212,8 @@ main() {
   # Send email report if updates were performed or errors occurred
   if [ "$UPDATES_PERFORMED" = true ] || [ -n "$ERRORS" ]; then
     HOSTNAME=$(hostname)
-    SUBJECT="Headscale VPS ($HOSTNAME) - Update Report"
-    BODY="Headscale VPS Update Report\n"
+    SUBJECT="Relay Server ($HOSTNAME) - Update Report"
+    BODY="Relay Server Update Report\n"
     BODY="${BODY}============================\n"
     BODY="${BODY}Host: $HOSTNAME\n"
     BODY="${BODY}Time: $(date)\n\n"
