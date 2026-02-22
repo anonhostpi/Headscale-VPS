@@ -40,8 +40,8 @@ echo "  Production-Ready Configuration"
 echo "=========================================="
 
 # Load version configuration if available
-if [ -f /etc/headscale/versions.conf ]; then
-  source /etc/headscale/versions.conf
+if [ -f /etc/relay-server/versions.conf ]; then
+  source /etc/relay-server/versions.conf
 fi
 
 SETUP_STAGE="user"
@@ -56,7 +56,7 @@ SETUP_STAGE="directories"
 echo "[2/8] Creating directories..."
 mkdir -p /var/lib/headscale
 mkdir -p /var/lib/headplane
-mkdir -p /etc/headscale/templates
+mkdir -p /etc/relay-server/templates
 mkdir -p /etc/headplane
 mkdir -p /var/log/headscale
 mkdir -p /var/log/caddy
@@ -178,11 +178,11 @@ systemctl daemon-reload
 systemctl enable headscale
 systemctl enable caddy
 systemctl enable fail2ban
-systemctl enable headscale-healthcheck.timer
+systemctl enable relay-healthcheck.timer
 
 # Start fail2ban and health check timer (don't need configuration)
 systemctl start fail2ban
-systemctl start headscale-healthcheck.timer
+systemctl start relay-healthcheck.timer
 
 SETUP_STAGE="hardening"
 # Apply kernel hardening
