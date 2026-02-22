@@ -1,27 +1,27 @@
 # This file maps each installation file to its permissions.
-- path: /etc/headscale/versions.conf
+- path: /etc/relay-server/versions.conf
   permissions: "0644"
-- path: /etc/headscale/constants.conf
+- path: /etc/relay-server/constants.conf
   permissions: "0644"
 - path: /etc/apt/preferences.d/headscale-pinning
   permissions: "0644"
-- path: /usr/local/lib/headscale-common.sh
+- path: /usr/local/lib/relay-common.sh
   permissions: "0644"
-- path: /usr/local/lib/headscale-validators.sh
+- path: /usr/local/lib/relay-validators.sh
   permissions: "0644"
-- path: /usr/local/lib/headscale-secrets.sh
+- path: /usr/local/lib/relay-secrets.sh
   permissions: "0644"
 - path: /etc/ssh/sshd_config.d/99-hardening.conf
   permissions: "0644"
 - path: /etc/sysctl.d/99-security.conf
   permissions: "0644"
-- path: /usr/local/bin/headscale-config
+- path: /usr/local/bin/relay-config
   permissions: "0755"
-- path: /etc/headscale/templates/headscale.yaml.tpl
+- path: /etc/relay-server/templates/headscale.yaml.tpl
   permissions: "0644"
-- path: /etc/headscale/templates/headplane.yaml.tpl
+- path: /etc/relay-server/templates/headplane.yaml.tpl
   permissions: "0644"
-- path: /etc/headscale/templates/Caddyfile.tpl
+- path: /etc/relay-server/templates/Caddyfile.tpl
   permissions: "0644"
 - path: /etc/systemd/system/headscale.service
   permissions: "0644"
