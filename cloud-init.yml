@@ -1,5 +1,5 @@
 #cloud-config
-# Headscale + Headplane VPS - Production Deployment
+# Coordination & Relay Server - Production Deployment
 # Full documentation: https://github.com/anonhostpi/Headscale-VPS/blob/main/README.md
 
 bootcmd:
@@ -90,3 +90,5 @@ packages:
 runcmd:
   - /opt/setup-headscale.sh
   - /opt/install-headplane.sh
+  - /opt/install-yq.sh
+  - /opt/install-matrix.sh
