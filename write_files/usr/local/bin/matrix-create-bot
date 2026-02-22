@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# matrix-create-bot - Create a Matrix bot account using registration token
+# Usage: matrix-create-bot <username> <password>
+set -e
+
+ENV_FILE="/etc/environment.d/relay-server.conf"
+[ -f "$ENV_FILE" ] && source "$ENV_FILE"
+
+USERNAME="$1"
+PASSWORD="$2"
+
+if [ -z "$USERNAME" ] || [ -z "$PASSWORD" ]; then
+  echo "Usage: $0 <username> <password>" && exit 1
+fi
+
+if [ -z "$MATRIX_DOMAIN" ] || [ -z "$MATRIX_REGISTRATION_TOKEN" ]; then
+  echo "ERROR: MATRIX_DOMAIN and MATRIX_REGISTRATION_TOKEN must be set in $ENV_FILE"
+  exit 1
+fi
