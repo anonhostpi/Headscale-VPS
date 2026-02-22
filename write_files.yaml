@@ -41,17 +41,17 @@
   permissions: "0644"
 - path: /etc/systemd/system/relay-healthcheck.timer
   permissions: "0644"
-- path: /etc/logrotate.d/headscale
+- path: /etc/logrotate.d/relay-server
   permissions: "0644"
 - path: /etc/msmtprc
   permissions: "0600"
-- path: /usr/local/bin/msmtp-config
+- path: /usr/local/bin/relay-msmtp-config
   permissions: "0755"
 - path: /etc/apt/apt.conf.d/50unattended-upgrades
   permissions: "0644"
 - path: /etc/apt/apt.conf.d/20auto-upgrades
   permissions: "0644"
-- path: /usr/local/bin/headscale-update
+- path: /usr/local/bin/relay-update
   permissions: "0755"
 - path: /etc/fail2ban/action.d/msmtp-mail.conf
   permissions: "0644"
@@ -67,9 +67,9 @@
   permissions: "0644"
 - path: /etc/fail2ban/jail.d/recidive.conf
   permissions: "0644"
-- path: /etc/audit/rules.d/headscale.rules
+- path: /etc/audit/rules.d/relay-server.rules
   permissions: "0644"
 - path: /opt/setup-headscale.sh
   permissions: "0755"
-- path: /usr/local/bin/headscale-user-setup
+- path: /usr/local/bin/relay-user-setup
   permissions: "0755"
