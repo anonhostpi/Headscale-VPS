@@ -6,7 +6,7 @@ echo "  Installing Headplane (Native Mode)"
 echo "=========================================="
 
 # Load version configuration
-source /etc/headscale/versions.conf
+source /etc/relay-server/versions.conf
 NODE_VERSION="${NODE_VERSION:-22}"
 HEADPLANE_VERSION="${HEADPLANE_VERSION:-}"
 
