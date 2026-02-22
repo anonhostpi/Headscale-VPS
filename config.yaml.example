@@ -22,3 +22,16 @@ matrix:
   registration_token: null              # Auto-generated if null and registration=token
   admin_user: admin                     # First admin username
   admin_password: null                  # Auto-generated if null
+
+# === Email Notifications ===
+smtp:
+  enabled: true                         # Configure SMTP email
+  sender_email: alerts@example.com      # M365 SMTP sender
+  recipient_email: admin@example.com    # Where alerts go
+  smtp_user: alerts@example.com         # SMTP login (usually same as sender)
+  smtp_password: your-app-password-here # M365 app password
+
+# === Security ===
+security:
+  ssh_port: 22                          # SSH port (for firewall rules)
+  fail2ban: true                        # Enable fail2ban
