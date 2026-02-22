@@ -3,7 +3,7 @@
 # Runs every 5 minutes via systemd timer
 
 # Load constants
-source /etc/headscale/constants.conf
+source /etc/relay-server/constants.conf
 
 HEALTH_STATUS=0
 REPORT=""
@@ -97,6 +97,16 @@ check_disk_space() {
   fi
 }
 
+# Check Matrix C-S API endpoint
+check_matrix_api() {
+  if curl -sf "http://localhost:${CONDUIT_LISTEN_PORT}/_matrix/client/versions" >/dev/null 2>&1; then
+    REPORT="${REPORT}✓ Matrix C-S API is reachable\n"
+  else
+    REPORT="${REPORT}✗ Matrix C-S API is NOT reachable\n"
+    HEALTH_STATUS=1
+  fi
+}
+
 # Run all checks
 check_service headscale
 check_service caddy
@@ -107,6 +117,13 @@ check_api_endpoint
 check_cert_expiry
 check_api_key_expiry
 check_disk_space
+
+# Conduit checks (only if conduit service exists)
+if systemctl list-unit-files conduit.service >/dev/null 2>&1; then
+  check_service conduit
+  check_port "${CONDUIT_LISTEN_PORT}" "Matrix Conduit"
+  check_matrix_api
+fi
 
 # Output report
 echo -e "=========================================="
