@@ -125,8 +125,9 @@ if wget -q "$CHECKSUMS_URL" -O /tmp/headscale_checksums.txt 2>/dev/null; then
     echo "${EXPECTED_CHECKSUM}  /tmp/headscale.deb" | sha256sum -c - && {
       echo "    Checksum verified: OK"
     } || {
-      echo "WARNING: Headscale checksum verification failed!"
-      echo "Proceeding with installation anyway..."
+      echo "ERROR: Headscale checksum verification failed!"
+      rm -f /tmp/headscale.deb
+      exit 1
     }
   else
     echo "    Checksum file found but $HS_DEB not listed - skipping verification"
