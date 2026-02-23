@@ -11,7 +11,14 @@ source /etc/relay-server/versions.conf
 CONDUIT_VERSION="${CONDUIT_VERSION:-v0.5.0}"
 CONDUIT_SHA256="${CONDUIT_SHA256:-}"
 
-BINARY_URL="https://forgejo.ellis.link/continuwuation/continuwuity/releases/download/${CONDUIT_VERSION}/conduit-x86_64-unknown-linux-musl"
+ARCH="$(uname -m)"
+case "$ARCH" in
+  x86_64)  CONDUIT_ARCH="x86_64" ;;
+  aarch64) CONDUIT_ARCH="aarch64" ;;
+  *) echo "ERROR: Unsupported architecture: $ARCH"; exit 1 ;;
+esac
+
+BINARY_URL="https://forgejo.ellis.link/continuwuation/continuwuity/releases/download/${CONDUIT_VERSION}/conduit-${CONDUIT_ARCH}-unknown-linux-musl"
 
 # Create conduit system user
 echo "[1/5] Creating conduit user..."
@@ -46,9 +53,10 @@ echo "[4/5] Installing Conduit binary..."
 install -m 0755 /tmp/matrix-conduit /usr/local/bin/matrix-conduit
 rm -f /tmp/matrix-conduit
 
-echo "[5/5] Enabling Conduit service..."
+echo "[5/5] Registering Conduit service..."
 systemctl daemon-reload
-systemctl enable conduit
+echo "  Conduit installed but not enabled."
+echo "  Run 'sudo server-config' to configure and enable Matrix."
 
 echo ""
 echo "=========================================="
