@@ -309,6 +309,7 @@ main() {
 
   # Skip prompts if all required variables are already set (for automated deployment)
   if [ -n "$HEADSCALE_DOMAIN" ] && [ -n "$AZURE_TENANT_ID" ] && [ -n "$AZURE_CLIENT_ID" ] && [ -n "$AZURE_CLIENT_SECRET" ] && [ -n "$ALLOWED_EMAIL" ]; then
+    AUTOMATED=true
     echo "Using provided configuration values..."
   else
     echo "For Azure AD setup instructions, see:"
@@ -338,7 +339,7 @@ main() {
   fi
 
   # Skip confirmation if all env vars are set (automated deployment)
-  if [ -n "$HEADSCALE_DOMAIN" ] && [ -n "$AZURE_TENANT_ID" ] && [ -n "$AZURE_CLIENT_ID" ] && [ -n "$AZURE_CLIENT_SECRET" ] && [ -n "$ALLOWED_EMAIL" ]; then
+  if [ "$AUTOMATED" = true ]; then
     echo "Applying configuration automatically..."
     write_env_file
     write_secrets
