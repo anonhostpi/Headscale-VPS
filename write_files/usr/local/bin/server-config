@@ -43,6 +43,20 @@ validate_inputs() {
   validate_email "$ALLOWED_EMAIL" || { print_error "Invalid email: $ALLOWED_EMAIL"; return 1; }
 }
 
+resolve_domain_ip() {
+  local domain="$1"; local ip
+  if [ -z "$ip" ] && command -v nslookup &>/dev/null; then
+    ip=$(nslookup "$domain" 2>/dev/null | awk '/^Address: / {print $2}' | grep -E '^[0-9]+' | head -1)
+  fi
+  if [ -z "$ip" ] && command -v dig &>/dev/null; then
+    ip=$(dig +short "$domain" A | grep -E '^[0-9]+' | head -1)
+  fi
+  if [ -z "$ip" ] && command -v getent &>/dev/null; then
+    ip=$(getent ahosts "$domain" 2>/dev/null | awk '/STREAM/ {print $1; exit}')
+  fi
+  echo "$ip"
+}
+
 # Write environment file with all service vars
 write_env_file() {
   mkdir -p "$(dirname "$ENV_FILE")"
@@ -68,7 +82,7 @@ process_templates() {
   export ALLOWED_EMAIL MATRIX_DOMAIN MATRIX_SERVER_NAME
   export MATRIX_FEDERATION MATRIX_ALLOW_REGISTRATION MATRIX_REGISTRATION_TOKEN
 
-  HEADSCALE_IP=$(getent ahosts "$HEADSCALE_DOMAIN" 2>/dev/null | awk '/STREAM/ {print $1; exit}')
+  HEADSCALE_IP=$(resolve_domain_ip "$HEADSCALE_DOMAIN")
   export HEADSCALE_IP
 
   envsubst < "$TEMPLATES_DIR/headscale.yaml.tpl" > /etc/headscale/config.yaml
