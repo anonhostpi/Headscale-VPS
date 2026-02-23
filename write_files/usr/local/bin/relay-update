@@ -242,7 +242,15 @@ main() {
       log "Using pinned Conduit version: $LATEST_CD"
     fi
     log "Conduit: installed=$CURRENT_CD, target=${LATEST_CD:-none}"
-    # WIP - update check in next commit
+    if [ -n "$LATEST_CD" ] && [ "$CURRENT_CD" != "$LATEST_CD" ]; then
+      if update_conduit "$CURRENT_CD" "$LATEST_CD"; then
+        REPORT="${REPORT}Conduit: $CURRENT_CD -> $LATEST_CD [OK]\n"
+        UPDATES_PERFORMED=true
+      else
+        REPORT="${REPORT}Conduit: $CURRENT_CD -> $LATEST_CD [FAILED]\n"
+        ERRORS="${ERRORS}Conduit update failed\n"
+      fi
+    fi
   fi
 
   log "Update check complete"
