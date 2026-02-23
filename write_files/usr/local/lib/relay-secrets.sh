@@ -1,5 +1,5 @@
 #!/bin/bash
-# secrets.sh - Shared secret management functions for Headscale VPS
+# relay-secrets.sh - Shared secret management functions for Headscale VPS
 # Provides systemd-creds encryption with graceful degradation
 
 # Load constants (if available, skip if already loaded to avoid readonly errors)
