@@ -10,6 +10,7 @@ API_KEY_EXPIRES="/var/lib/headscale/api_key_expires"
 HEADPLANE_CONFIG="/etc/headplane/config.yaml"
 CREDSTORE="/etc/credstore.encrypted"
 
+main() {
 echo "Rotating Headscale API key..."
 
 # Ensure headscale is running
@@ -93,3 +94,5 @@ fi
 
 echo ""
 echo "Rotation complete. New key expires: $(cat $API_KEY_EXPIRES)"
+}
+main "$@"
