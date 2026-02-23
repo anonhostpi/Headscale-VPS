@@ -43,8 +43,8 @@ check_api_endpoint() {
 
 # Check TLS certificate expiry
 check_cert_expiry() {
-  if [ -f /etc/environment.d/headscale.conf ]; then
-    DOMAIN=$(grep HEADSCALE_DOMAIN /etc/environment.d/headscale.conf | cut -d= -f2 | tr -d '"' 2>/dev/null)
+  if [ -f /etc/environment.d/relay-server.conf ]; then
+    DOMAIN=$(grep HEADSCALE_DOMAIN /etc/environment.d/relay-server.conf | cut -d= -f2 | tr -d '"' 2>/dev/null)
     if [ -n "$DOMAIN" ]; then
       CERT="/var/lib/caddy/.local/share/caddy/certificates/acme-v02.api.letsencrypt.org-directory/${DOMAIN}/${DOMAIN}.crt"
 
