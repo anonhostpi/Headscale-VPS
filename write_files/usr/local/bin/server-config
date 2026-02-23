@@ -175,6 +175,15 @@ write_env_file
 process_templates
 print_success "Configuration applied"
 
-systemctl restart headscale caddy 2>/dev/null || true
-[ "${MATRIX_ENABLED:-false}" = "true" ] && systemctl restart conduit 2>/dev/null || true
+write_secrets
+generate_api_key
+configure_smtp
+systemctl restart headscale caddy headplane 2>/dev/null || true
+if [ "${MATRIX_ENABLED:-false}" = "true" ]; then
+  systemctl enable conduit 2>/dev/null || true
+  systemctl restart conduit 2>/dev/null || true
+  # Enable fail2ban matrix jail
+  sed -i 's/enabled = false/enabled = true/' /etc/fail2ban/jail.d/matrix.conf
+  systemctl reload fail2ban 2>/dev/null || true
+fi
 print_success "Services restarted"
