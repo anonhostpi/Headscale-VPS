@@ -1,5 +1,5 @@
 #!/bin/bash
-# validators.sh - Input validation functions for Headscale VPS
+# relay-validators.sh - Input validation functions for Headscale VPS
 
 # Validate domain name format
 validate_domain() {
