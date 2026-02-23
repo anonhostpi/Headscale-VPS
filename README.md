@@ -119,7 +119,7 @@ See [AZURE_AD_SETUP.md](AZURE_AD_SETUP.md) for detailed step-by-step instruction
 
 ```bash
 # On any device with Tailscale installed
-tailscale up --login-server https://YOUR_HEADSCALE_DOMAIN
+tailscale up --login-server https://YOUR_DOMAIN
 ```
 
 Your browser will open for Azure AD authentication.
