@@ -47,7 +47,19 @@ get_installed_conduit_version() {
 update_conduit() {
   local current="$1"
   local latest="$2"
-  : # WIP - implementation in next commit
+  log "Updating Conduit: $current -> $latest"
+  ARCH="$(uname -m)"
+  case "$ARCH" in
+    x86_64)  CONDUIT_ARCH="x86_64" ;;
+    aarch64) CONDUIT_ARCH="aarch64" ;;
+    *) log "ERROR: Unsupported architecture: $ARCH"; return 1 ;;
+  esac
+  local url="https://forgejo.ellis.link/continuwuation/continuwuity/releases/download/${latest}/conduit-${CONDUIT_ARCH}-unknown-linux-musl"
+  wget -q "$url" -O /tmp/matrix-conduit
+  install -m 0755 /tmp/matrix-conduit /usr/local/bin/matrix-conduit
+  rm -f /tmp/matrix-conduit
+  systemctl restart conduit
+  log "Conduit updated successfully"
 }
 
 get_latest_github_release() {
