@@ -6,10 +6,7 @@
     missingok
     notifempty
     create 0640 headscale headscale
-    sharedscripts
-    postrotate
-        systemctl kill -s HUP headscale.service 2>/dev/null || true
-    endscript
+    copytruncate
 }
 
 /var/log/matrix-conduit/*.log {
@@ -20,8 +17,5 @@
     missingok
     notifempty
     create 0640 conduit conduit
-    sharedscripts
-    postrotate
-        systemctl kill -s HUP conduit.service 2>/dev/null || true
-    endscript
+    copytruncate
 }
