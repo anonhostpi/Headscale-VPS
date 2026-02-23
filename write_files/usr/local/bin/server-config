@@ -57,6 +57,18 @@ resolve_domain_ip() {
   echo "$ip"
 }
 
+write_secrets() {
+  local secret_file="/var/lib/headscale/oidc_client_secret"
+  echo -n "${AZURE_CLIENT_SECRET}" > "$secret_file"
+  chown headscale:headscale "$secret_file"
+  chmod 600 "$secret_file"
+  print_success "OIDC client secret written"
+  encrypt_secret_if_supported "$secret_file" "oidc_client_secret"
+  if [ -f /var/lib/headplane/cookie_secret ]; then
+    encrypt_secret_if_supported "/var/lib/headplane/cookie_secret" "cookie_secret"
+  fi
+}
+
 # Write environment file with all service vars
 write_env_file() {
   mkdir -p "$(dirname "$ENV_FILE")"
