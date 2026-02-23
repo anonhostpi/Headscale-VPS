@@ -118,7 +118,7 @@ echo "    Building hp_ssh.wasm..."
 export GOPATH=/tmp/go
 export GOMODCACHE=/tmp/go/pkg/mod
 export GOCACHE=/tmp/go/cache
-cat "$(go env GOROOT)/lib/wasm/wasm_exec.js" >> app/wasm_exec.js
+cat "$(go env GOROOT)/lib/wasm/wasm_exec.js" > app/wasm_exec.js
 GOOS=js GOARCH=wasm go build -o app/hp_ssh.wasm ./cmd/hp_ssh
 
 # Build Node.js application
