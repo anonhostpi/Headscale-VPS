@@ -27,5 +27,5 @@ Unattended-Upgrade::SyslogFacility "daemon";
 
 // Run Headscale/Headplane update after OS packages
 Unattended-Upgrade::Post-Invoke {
-    "/usr/local/bin/headscale-update --unattended || true";
+    "/usr/local/bin/relay-update --unattended || true";
 };
