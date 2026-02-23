@@ -1,5 +1,6 @@
 [Unit]
 Description=Conduit Matrix Homeserver
+ConditionPathExists=/etc/matrix-conduit/conduit.toml
 After=network-online.target
 Wants=network-online.target
 
@@ -28,7 +29,7 @@ RestrictNamespaces=true
 LockPersonality=true
 MemoryDenyWriteExecute=true
 RestrictRealtime=true
-CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=
 SystemCallFilter=@system-service
 SystemCallArchitectures=native
 PrivateDevices=true
