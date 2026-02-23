@@ -232,7 +232,19 @@ main() {
       REPORT="${REPORT}Headplane: v$CURRENT_HP [up-to-date]\n"
     fi
   fi
-  
+
+  # Check Conduit (only if installed)
+  if [ -f /usr/local/bin/matrix-conduit ]; then
+    CURRENT_CD=$(get_installed_conduit_version)
+    LATEST_CD=""
+    if [ -n "${CONDUIT_VERSION:-}" ]; then
+      LATEST_CD="${CONDUIT_VERSION}"
+      log "Using pinned Conduit version: $LATEST_CD"
+    fi
+    log "Conduit: installed=$CURRENT_CD, target=${LATEST_CD:-none}"
+    # WIP - update check in next commit
+  fi
+
   log "Update check complete"
   
   # Send email report if updates were performed or errors occurred
