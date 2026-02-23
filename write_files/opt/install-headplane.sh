@@ -107,6 +107,14 @@ else
   TARGET_VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo "main")
 fi
 echo "    Using version: ${TARGET_VERSION}"
+
+# Verify git tag signature if available
+if ! git tag -v "${TARGET_VERSION}" 2>/dev/null; then
+  echo "WARNING: Headplane tag ${TARGET_VERSION} is not signed or signature verification failed"
+else
+  echo "Headplane tag ${TARGET_VERSION} signature verified"
+fi
+
 git checkout "${TARGET_VERSION}"
 
 # Install dependencies and build
