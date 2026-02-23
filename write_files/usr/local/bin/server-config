@@ -91,6 +91,11 @@ process_templates() {
     < "$TEMPLATES_DIR/headplane.yaml.tpl" > /etc/headplane/config.yaml
   envsubst '${HEADSCALE_DOMAIN}' \
     < "$TEMPLATES_DIR/Caddyfile.tpl" > /etc/caddy/Caddyfile
+  chown headscale:headscale /etc/headscale/config.yaml
+  chmod 640 /etc/headscale/config.yaml
+  chown headscale:headscale /etc/headplane/config.yaml
+  chmod 640 /etc/headplane/config.yaml
+  chmod 644 /etc/caddy/Caddyfile
 
   if [ "${MATRIX_ENABLED:-false}" = "true" ] && [ -f "$TEMPLATES_DIR/Caddyfile-matrix.tpl" ]; then
     envsubst < "$TEMPLATES_DIR/Caddyfile-matrix.tpl" >> /etc/caddy/Caddyfile
