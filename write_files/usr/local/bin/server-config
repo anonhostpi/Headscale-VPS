@@ -142,7 +142,8 @@ process_templates() {
 
   if [ "${MATRIX_ENABLED:-false}" = "true" ] && [ -f "$TEMPLATES_DIR/Caddyfile-matrix.tpl" ]; then
     envsubst < "$TEMPLATES_DIR/Caddyfile-matrix.tpl" >> /etc/caddy/Caddyfile
-    envsubst < /etc/matrix-conduit/conduit.toml.tpl > /etc/matrix-conduit/conduit.toml
+    envsubst '${MATRIX_SERVER_NAME} ${MATRIX_ALLOW_REGISTRATION} ${MATRIX_REGISTRATION_TOKEN} ${MATRIX_FEDERATION}' \
+      < "$TEMPLATES_DIR/conduit.toml.tpl" > /etc/matrix-conduit/conduit.toml
     chown conduit:conduit /etc/matrix-conduit/conduit.toml
   fi
 }
