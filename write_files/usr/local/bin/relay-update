@@ -36,6 +36,20 @@ get_installed_headplane_version() {
   fi
 }
 
+get_installed_conduit_version() {
+  if [ -f /usr/local/bin/matrix-conduit ]; then
+    /usr/local/bin/matrix-conduit --version 2>/dev/null | grep -oP 'v\d+\.\d+\.\d+' | head -1 || echo "unknown"
+  else
+    echo "not-installed"
+  fi
+}
+
+update_conduit() {
+  local current="$1"
+  local latest="$2"
+  : # WIP - implementation in next commit
+}
+
 get_latest_github_release() {
   local repo="$1"
   # Get latest release, excluding pre-releases and drafts
