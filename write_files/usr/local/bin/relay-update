@@ -132,6 +132,14 @@ update_headplane() {
   
   # Fetch and checkout new version
   git fetch --all --tags
+
+  # Verify git tag signature if available
+  if ! git tag -v "${latest}" 2>/dev/null; then
+    log "WARNING: Headplane tag ${latest} is not signed or signature verification failed"
+  else
+    log "Headplane tag ${latest} signature verified"
+  fi
+
   git checkout "${latest}"
   
   # Rebuild
