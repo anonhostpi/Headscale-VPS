@@ -57,6 +57,21 @@ resolve_domain_ip() {
   echo "$ip"
 }
 
+generate_api_key() {
+  if [ -f /var/lib/headscale/api_key ]; then
+    print_success "Headscale API key already exists"; return 0
+  fi
+  print_info "Generating Headscale API key for Headplane..."
+  systemctl start headscale
+  local retries=30
+  while [ $retries -gt 0 ]; do
+    headscale users list >/dev/null 2>&1 && break
+    sleep 1; retries=$((retries - 1))
+  done
+  [ $retries -eq 0 ] && { print_error "Headscale failed to start"; return 1; }
+  # WIP - key creation in next commit
+}
+
 write_secrets() {
   local secret_file="/var/lib/headscale/oidc_client_secret"
   echo -n "${AZURE_CLIENT_SECRET}" > "$secret_file"
