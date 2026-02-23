@@ -89,6 +89,17 @@ write_secrets() {
   fi
 }
 
+configure_smtp() {
+  [ -z "$SMTP_SENDER" ] && return 0
+  sed -i "s|SMTP_FROM_EMAIL|$SMTP_SENDER|" /etc/msmtprc
+  sed -i "s|SMTP_USER_EMAIL|${SMTP_USER:-$SMTP_SENDER}|" /etc/msmtprc
+  echo -n "$SMTP_PASSWORD" > /etc/msmtp-password
+  chmod 600 /etc/msmtp-password
+  encrypt_secret_if_supported "/etc/msmtp-password" "smtp_password"
+  echo "root: $SMTP_RECIPIENT" > /etc/aliases
+  print_success "SMTP configured"
+}
+
 # Write environment file with all service vars
 write_env_file() {
   mkdir -p "$(dirname "$ENV_FILE")"
