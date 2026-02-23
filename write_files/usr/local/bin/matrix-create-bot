@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 # matrix-create-bot - Create a Matrix bot account using registration token
 # Usage: matrix-create-bot <username> <password>
 set -e
@@ -18,17 +18,12 @@ if [ -z "$MATRIX_DOMAIN" ] || [ -z "$MATRIX_REGISTRATION_TOKEN" ]; then
   exit 1
 fi
 
-curl -fsSL -X POST \
-  -H "Content-Type: application/json" \
-  -d "{
-    \"auth\": {
-      \"type\": \"m.login.registration_token\",
-      \"token\": \"${MATRIX_REGISTRATION_TOKEN}\",
-      \"session\": \"\"
-    },
-    \"username\": \"${USERNAME}\",
-    \"password\": \"${PASSWORD}\"
-  }" \
+json_payload=$(jq -n \
+  --arg token "$MATRIX_REGISTRATION_TOKEN" \
+  --arg user "$USERNAME" \
+  --arg pass "$PASSWORD" \
+  '{ auth: { type: "m.login.registration_token", token: $token, session: "" }, username: $user, password: $pass }')
+curl -fsSL -X POST -H "Content-Type: application/json" -d "$json_payload" \
   "https://${MATRIX_DOMAIN}/_matrix/client/v3/register"
 
 echo ""
