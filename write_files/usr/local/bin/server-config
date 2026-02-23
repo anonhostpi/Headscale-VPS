@@ -115,6 +115,11 @@ load_config() {
 print_banner "Relay Server Configuration"
 load_config
 validate_inputs
+if [ "$MATRIX_ALLOW_REGISTRATION" = "true" ] && [ -z "$MATRIX_REGISTRATION_TOKEN" ]; then
+  MATRIX_REGISTRATION_TOKEN=$(openssl rand -hex 32)
+  print_warning "Auto-generated registration token: $MATRIX_REGISTRATION_TOKEN"
+  print_warning "Save this token - you will need it to create accounts"
+fi
 write_env_file
 process_templates
 print_success "Configuration applied"
