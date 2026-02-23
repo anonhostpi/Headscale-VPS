@@ -7,6 +7,7 @@ set -e
 
 source /usr/local/lib/relay-common.sh
 source /usr/local/lib/relay-secrets.sh
+source /usr/local/lib/relay-validators.sh
 
 TEMPLATES_DIR="/etc/relay-server/templates"
 ENV_FILE="/etc/environment.d/relay-server.conf"
@@ -34,6 +35,12 @@ parse_yaml() {
   SMTP_RECIPIENT=$(yq '.smtp.recipient_email' "$yaml_file")
   SMTP_USER=$(yq '.smtp.smtp_user' "$yaml_file")
   SMTP_PASSWORD=$(yq '.smtp.smtp_password' "$yaml_file")
+}
+
+validate_inputs() {
+  validate_domain "$HEADSCALE_DOMAIN" || { print_error "Invalid domain: $HEADSCALE_DOMAIN"; return 1; }
+  validate_uuid "$AZURE_TENANT_ID" || { print_error "Invalid tenant ID: $AZURE_TENANT_ID"; return 1; }
+  validate_email "$ALLOWED_EMAIL" || { print_error "Invalid email: $ALLOWED_EMAIL"; return 1; }
 }
 
 # Write environment file with all service vars
@@ -93,6 +100,7 @@ load_config() {
 
 print_banner "Relay Server Configuration"
 load_config
+validate_inputs
 write_env_file
 process_templates
 print_success "Configuration applied"
