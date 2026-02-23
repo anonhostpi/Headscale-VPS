@@ -19,9 +19,9 @@ matrix:
   server_name: example.com              # User ID domain (@user:example.com)
   federation: false                     # Disable federation (private server)
   registration: token                   # disabled | token | open
-  registration_token: null              # Auto-generated if null and registration=token
-  admin_user: admin                     # First admin username
-  admin_password: null                  # Auto-generated if null
+  registration_token: null              # Auto-generated if empty and registration=token
+  admin_user: admin                     # TODO: Not yet implemented (requires Conduit admin API)
+  admin_password: null                  # TODO: Not yet implemented
 
 # === Email Notifications ===
 smtp:
@@ -33,5 +33,5 @@ smtp:
 
 # === Security ===
 security:
-  ssh_port: 22                          # SSH port (for firewall rules)
-  fail2ban: true                        # Enable fail2ban
+  ssh_port: 22                          # Informational only (configured in cloud-init)
+  fail2ban: true                        # Informational only (configured in cloud-init)
