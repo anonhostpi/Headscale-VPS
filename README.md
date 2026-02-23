@@ -2,6 +2,21 @@
 
 Production-ready deployment of [Headscale](https://github.com/juanfont/headscale) (self-hosted Tailscale control server) with [Headplane](https://github.com/tale/headplane) web UI and [Conduit](https://forgejo.ellis.link/continuwuation/continuwuity) Matrix homeserver on Ubuntu, using cloud-init for automated setup.
 
+## Table of Contents
+- [Features](#features)
+- [Quick Start](#quick-start)
+- [Configuration](#configuration)
+- [Architecture](#architecture)
+- [Management](#management)
+- [Security Considerations](#security-considerations)
+- [Troubleshooting](#troubleshooting)
+- [Development & Testing](#development--testing)
+- [Version Pinning](#version-pinning)
+- [Backup & Recovery](#backup--recovery)
+- [Contributing](#contributing)
+- [License](#license)
+- [References](#references)
+
 ## Features
 
 ### Core Services
