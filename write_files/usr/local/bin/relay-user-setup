@@ -1,6 +1,6 @@
 #!/bin/bash
-# headscale-user-setup - Setup ubuntu user with SSH access, then disable root SSH
-# Usage: headscale-user-setup [--non-interactive PASSWORD]
+# relay-user-setup - Setup ubuntu user with SSH access, then disable root SSH
+# Usage: relay-user-setup [--non-interactive PASSWORD]
 
 set -e
 
