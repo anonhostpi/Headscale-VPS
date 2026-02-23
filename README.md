@@ -255,7 +255,7 @@ systemctl status conduit
 journalctl -u conduit -f
 
 # Create a bot account (after Conduit is running)
-sudo matrix-create-bot
+sudo relay-matrix-create-bot
 
 # Test Matrix API
 curl https://YOUR_MATRIX_DOMAIN/_matrix/client/versions
