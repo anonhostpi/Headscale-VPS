@@ -1,5 +1,5 @@
 #!/bin/bash
-# common.sh - Shared utilities for Headscale VPS scripts
+# relay-common.sh - Shared utilities for Headscale VPS scripts
 # Provides color definitions, logging functions, and banners
 
 # Color definitions (used across multiple scripts)
