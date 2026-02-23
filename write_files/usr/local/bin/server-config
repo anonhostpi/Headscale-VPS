@@ -69,7 +69,12 @@ generate_api_key() {
     sleep 1; retries=$((retries - 1))
   done
   [ $retries -eq 0 ] && { print_error "Headscale failed to start"; return 1; }
-  # WIP - key creation in next commit
+  local key; key=$(headscale apikeys create --expiration 90d 2>&1 | tail -1)
+  [ -z "$key" ] && { print_error "API key creation failed"; return 1; }
+  echo -n "$key" > /var/lib/headscale/api_key
+  chown headscale:headscale /var/lib/headscale/api_key
+  chmod 600 /var/lib/headscale/api_key
+  encrypt_secret_if_supported "/var/lib/headscale/api_key" "headscale_api_key"
 }
 
 write_secrets() {
