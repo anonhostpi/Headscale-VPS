@@ -1,6 +1,6 @@
 # Coordination & Relay Server
 
-Production-ready deployment of [Headscale](https://github.com/juanfont/headscale) (self-hosted Tailscale control server) with [Headplane](https://github.com/tale/headplane) web UI and [Conduit](https://gitlab.com/famedly/conduit) Matrix homeserver on Ubuntu, using cloud-init for automated setup.
+Production-ready deployment of [Headscale](https://github.com/juanfont/headscale) (self-hosted Tailscale control server) with [Headplane](https://github.com/tale/headplane) web UI and [Conduit](https://forgejo.ellis.link/continuwuation/continuwuity) Matrix homeserver on Ubuntu, using cloud-init for automated setup.
 
 ## Features
 
@@ -511,7 +511,7 @@ YQ_SHA256="placeholder_update_before_deploy"
 3. Run: `sudo relay-update`
 
 **Conduit:**
-1. Check releases at https://gitlab.com/famedly/conduit/-/releases
+1. Check releases at https://forgejo.ellis.link/continuwuation/continuwuity/releases
 2. Get SHA256 from the release assets
 3. Update `CONDUIT_VERSION` and `CONDUIT_SHA256` in versions.conf
 4. Run: `sudo /opt/install-matrix.sh`
@@ -608,7 +608,7 @@ This configuration is provided as-is for self-hosting. Headscale, Headplane, and
 
 - [Headscale Documentation](https://headscale.net/)
 - [Headplane Documentation](https://github.com/tale/headplane)
-- [Conduit Documentation](https://gitlab.com/famedly/conduit)
+- [Continuwuity Documentation](https://forgejo.ellis.link/continuwuation/continuwuity)
 - [Tailscale Documentation](https://tailscale.com/kb/)
 - [Azure AD OIDC Documentation](https://learn.microsoft.com/en-us/azure/active-directory/develop/v2-protocols-oidc)
 - [yq Documentation](https://mikefarah.gitbook.io/yq/)
