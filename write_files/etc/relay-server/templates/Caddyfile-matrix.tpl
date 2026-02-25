@@ -7,7 +7,7 @@ ${MATRIX_DOMAIN} {
 
     # Matrix Client-Server API
     handle /_matrix/* {
-        reverse_proxy 127.0.0.1:6167
+        reverse_proxy 127.0.0.1:${CONDUIT_LISTEN_PORT}
     }
 
     # Well-known for client discovery (if server_name differs from domain)
