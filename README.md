@@ -146,7 +146,7 @@ Your browser will open for Azure AD authentication.
 All services are configured through a single YAML file. Store it in your password manager — it contains everything needed for full server recovery.
 
 ```yaml
-# headscale VPN settings
+# === Headscale VPN ===
 headscale:
   domain: vpn.example.com
   oidc:
@@ -155,7 +155,7 @@ headscale:
     client_secret: your-client-secret-here
     allowed_email: user@example.com
 
-# Matrix homeserver settings
+# === Matrix Homeserver ===
 matrix:
   enabled: true
   domain: matrix.example.com        # Public domain for Matrix
@@ -166,7 +166,7 @@ matrix:
   admin_user: admin
   admin_password: null              # Auto-generated if null
 
-# Email notifications
+# === Email Notifications ===
 smtp:
   enabled: true
   sender_email: alerts@example.com
@@ -174,7 +174,7 @@ smtp:
   smtp_user: alerts@example.com
   smtp_password: your-app-password-here
 
-# Security settings
+# === Security ===
 security:
   ssh_port: 22
   fail2ban: true
