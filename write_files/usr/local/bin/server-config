@@ -207,7 +207,7 @@ if [ "${MATRIX_ENABLED:-false}" = "true" ]; then
   systemctl enable conduit 2>/dev/null || true
   systemctl restart conduit 2>/dev/null || true
   # Enable fail2ban matrix jail
-  sed -i 's/enabled = false/enabled = true/' /etc/fail2ban/jail.d/matrix.conf
+  sed -i 's/enabled = false/enabled = true/' /etc/fail2ban/jail.d/matrix-auth.conf
   systemctl reload fail2ban 2>/dev/null || true
 fi
 print_success "Services restarted"
