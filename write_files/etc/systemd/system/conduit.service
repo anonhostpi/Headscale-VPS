@@ -16,6 +16,9 @@ StandardOutput=append:/var/log/matrix-conduit/conduit.log
 StandardError=append:/var/log/matrix-conduit/conduit.log
 
 # Hardening (matches headscale.service)
+# Note: Conduit reads secrets from conduit.toml directly (no credential support).
+# Ensure conduit.toml has restrictive permissions (0640 conduit:conduit).
+# See also: server-config process_templates() for file permission handling.
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
