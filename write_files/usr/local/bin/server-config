@@ -40,7 +40,18 @@ parse_yaml() {
 validate_inputs() {
   validate_domain "$HEADSCALE_DOMAIN" || { print_error "Invalid domain: $HEADSCALE_DOMAIN"; return 1; }
   validate_uuid "$AZURE_TENANT_ID" || { print_error "Invalid tenant ID: $AZURE_TENANT_ID"; return 1; }
+  validate_uuid "$AZURE_CLIENT_ID" || { print_error "Invalid client ID: $AZURE_CLIENT_ID"; return 1; }
   validate_email "$ALLOWED_EMAIL" || { print_error "Invalid email: $ALLOWED_EMAIL"; return 1; }
+  if [ "${MATRIX_ENABLED:-false}" = "true" ]; then
+    validate_domain "$MATRIX_DOMAIN" || { print_error "Invalid Matrix domain: $MATRIX_DOMAIN"; return 1; }
+    validate_domain "$MATRIX_SERVER_NAME" || { print_error "Invalid Matrix server name: $MATRIX_SERVER_NAME"; return 1; }
+  fi
+  if [ -n "$SMTP_SENDER" ]; then
+    validate_email "$SMTP_SENDER" || { print_error "Invalid SMTP sender: $SMTP_SENDER"; return 1; }
+  fi
+  if [ -n "$SMTP_RECIPIENT" ]; then
+    validate_email "$SMTP_RECIPIENT" || { print_error "Invalid SMTP recipient: $SMTP_RECIPIENT"; return 1; }
+  fi
 }
 
 resolve_domain_ip() {
