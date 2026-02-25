@@ -2,7 +2,7 @@
 server_name = "${MATRIX_SERVER_NAME}"
 database_path = "/var/lib/matrix-conduit/"
 database_backend = "rocksdb"
-port = 6167
+port = ${CONDUIT_LISTEN_PORT}
 address = "127.0.0.1"
 max_request_size = 20_000_000
 allow_registration = ${MATRIX_ALLOW_REGISTRATION}
