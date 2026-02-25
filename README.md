@@ -594,6 +594,9 @@ sqlite3 /var/lib/headscale/db.sqlite ".backup '$BACKUP_DIR/headscale.sqlite'"
 rsync -a /var/lib/matrix-conduit/ "$BACKUP_DIR/matrix-conduit/"
 
 # Backup configs and secrets
+# WARNING: This archive contains unencrypted secrets.
+# For production use, encrypt the archive:
+#   tar -czf - ... | gpg --symmetric --cipher-algo AES256 -o config.tar.gz.gpg
 tar -czf "$BACKUP_DIR/config.tar.gz" \
   /etc/environment.d/relay-server.conf \
   /etc/headscale/config.yaml \
