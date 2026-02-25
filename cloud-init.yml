@@ -29,6 +29,21 @@ bootcmd:
     while IFS= read -r line; do
       if echo "$line" | grep -q "^- path:"; then
         current_path=$(echo "$line" | sed 's/.*path: //' | tr -d '"')
+        # Validate path: must be absolute, no traversal, allowed prefixes
+        case "$current_path" in
+            /etc/*|/usr/local/*|/opt/*|/var/*)
+                ;;
+            *)
+                echo "  SKIP: Path outside allowed directories: $current_path"
+                current_path=""
+                continue
+                ;;
+        esac
+        if echo "$current_path" | grep -q '\.\.'; then
+            echo "  SKIP: Path contains traversal: $current_path"
+            current_path=""
+            continue
+        fi
       elif echo "$line" | grep -q "^  permissions:"; then
         current_perms=$(echo "$line" | sed 's/.*permissions: //' | tr -d '"')
 
