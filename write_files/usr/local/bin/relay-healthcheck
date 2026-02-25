@@ -119,7 +119,7 @@ check_api_key_expiry
 check_disk_space
 
 # Conduit checks (only if conduit service exists)
-if systemctl list-unit-files conduit.service >/dev/null 2>&1; then
+if systemctl list-unit-files conduit.service 2>/dev/null | grep -q "conduit.service"; then
   check_service conduit
   check_port "${CONDUIT_LISTEN_PORT}" "Matrix Conduit"
   check_matrix_api
