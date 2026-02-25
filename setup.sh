@@ -1,3 +1,11 @@
+#!/bin/bash
+# setup.sh - Post-deployment setup guide
+# WARNING: Do NOT execute this file directly. Follow the steps interactively.
+
+echo "ERROR: This file is a reference guide, not an executable script."
+echo "Follow the steps in this file manually, or see README.md for instructions."
+exit 1
+
 # If on an environment that starts off with root instead of ubuntu/normal user:
 /usr/local/bin/relay-user-setup
 
