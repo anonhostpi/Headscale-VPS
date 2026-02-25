@@ -39,7 +39,15 @@ chown -R conduit:conduit /etc/matrix-conduit
 echo "[3/5] Downloading Conduit ${CONDUIT_VERSION}..."
 wget -q "$BINARY_URL" -O /tmp/matrix-conduit
 
-if [ -n "$CONDUIT_SHA256" ]; then
+if [ -z "$CONDUIT_SHA256" ] || [ "$CONDUIT_SHA256" = "REPLACE_BEFORE_DEPLOY" ]; then
+  echo "WARNING: No Conduit SHA256 checksum configured in versions.conf"
+  echo "  Binary integrity cannot be verified. Set CONDUIT_SHA256 before production deploy."
+  if [ "$CONDUIT_SHA256" = "REPLACE_BEFORE_DEPLOY" ]; then
+    echo "ERROR: CONDUIT_SHA256 has sentinel value -- update versions.conf with the real hash"
+    rm -f /tmp/matrix-conduit
+    exit 1
+  fi
+else
   echo "${CONDUIT_SHA256}  /tmp/matrix-conduit" | sha256sum -c - || {
     echo "ERROR: Conduit binary checksum verification failed!"
     rm -f /tmp/matrix-conduit
