@@ -22,7 +22,15 @@ YQ_URL="https://github.com/mikefarah/yq/releases/download/${YQ_VERSION}/yq_linux
 echo "[1/3] Downloading yq ${YQ_VERSION}..."
 wget -q "$YQ_URL" -O /tmp/yq
 
-if [ -n "$YQ_SHA256" ]; then
+if [ -z "$YQ_SHA256" ] || [ "$YQ_SHA256" = "REPLACE_BEFORE_DEPLOY" ]; then
+  echo "WARNING: No yq SHA256 checksum configured in versions.conf"
+  echo "  Binary integrity cannot be verified. Set YQ_SHA256 before production deploy."
+  if [ "$YQ_SHA256" = "REPLACE_BEFORE_DEPLOY" ]; then
+    echo "ERROR: YQ_SHA256 has sentinel value -- update versions.conf with the real hash"
+    rm -f /tmp/yq
+    exit 1
+  fi
+else
   echo "${YQ_SHA256}  /tmp/yq" | sha256sum -c - || {
     echo "ERROR: yq checksum verification failed!"
     rm -f /tmp/yq; exit 1
