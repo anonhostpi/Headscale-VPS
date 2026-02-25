@@ -539,7 +539,7 @@ YQ_SHA256="placeholder_update_before_deploy"
 
 **Caddy:**
 Caddy is pinned via APT preferences. To upgrade:
-1. Remove or update `/etc/apt/preferences.d/headscale-pinning`
+1. Remove or update `/etc/apt/preferences.d/relay-pinning`
 2. Run: `sudo apt-get update && sudo apt-get install caddy`
 3. Test thoroughly
 4. Re-add APT pinning if desired
