@@ -90,7 +90,8 @@ encrypt_secret_if_supported() {
     fi
 
     if [ -n "$encrypt_output" ]; then
-      echo "  Error details: $encrypt_output" >&2
+      echo "  Encryption failed for $cred_name. Check systemd-creds configuration." >&2
+      logger -t relay-secrets "systemd-creds encrypt failed for $cred_name: $encrypt_output"
     fi
 
     chmod 600 "$plain_file"
