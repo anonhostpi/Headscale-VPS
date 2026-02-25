@@ -20,11 +20,11 @@ done
 # Parse YAML config using yq and export variables
 parse_yaml() {
   local yaml_file="$1"
-  HEADSCALE_DOMAIN=$(yq '.headscale.domain' "$yaml_file")
-  AZURE_TENANT_ID=$(yq '.headscale.oidc.tenant_id' "$yaml_file")
-  AZURE_CLIENT_ID=$(yq '.headscale.oidc.client_id' "$yaml_file")
-  AZURE_CLIENT_SECRET=$(yq '.headscale.oidc.client_secret' "$yaml_file")
-  ALLOWED_EMAIL=$(yq '.headscale.oidc.allowed_email' "$yaml_file")
+  HEADSCALE_DOMAIN=$(yq '.headscale.domain // ""' "$yaml_file")
+  AZURE_TENANT_ID=$(yq '.headscale.oidc.tenant_id // ""' "$yaml_file")
+  AZURE_CLIENT_ID=$(yq '.headscale.oidc.client_id // ""' "$yaml_file")
+  AZURE_CLIENT_SECRET=$(yq '.headscale.oidc.client_secret // ""' "$yaml_file")
+  ALLOWED_EMAIL=$(yq '.headscale.oidc.allowed_email // ""' "$yaml_file")
   MATRIX_ENABLED=$(yq '.matrix.enabled // "false"' "$yaml_file")
   MATRIX_DOMAIN=$(yq '.matrix.domain' "$yaml_file")
   MATRIX_SERVER_NAME=$(yq '.matrix.server_name' "$yaml_file")
