@@ -140,6 +140,8 @@ process_templates() {
   export HEADSCALE_DOMAIN AZURE_TENANT_ID AZURE_CLIENT_ID AZURE_CLIENT_SECRET
   export ALLOWED_EMAIL MATRIX_DOMAIN MATRIX_SERVER_NAME
   export MATRIX_FEDERATION MATRIX_ALLOW_REGISTRATION MATRIX_REGISTRATION_TOKEN
+  source /etc/relay-server/constants.conf
+  export CONDUIT_LISTEN_PORT
 
   HEADSCALE_IP=$(resolve_domain_ip "$HEADSCALE_DOMAIN")
   export HEADSCALE_IP
@@ -157,11 +159,14 @@ process_templates() {
   chmod 644 /etc/caddy/Caddyfile
 
   if [ "${MATRIX_ENABLED:-false}" = "true" ] && [ -f "$TEMPLATES_DIR/Caddyfile-matrix.tpl" ]; then
-    envsubst < "$TEMPLATES_DIR/Caddyfile-matrix.tpl" >> /etc/caddy/Caddyfile
-    envsubst '${MATRIX_SERVER_NAME} ${MATRIX_ALLOW_REGISTRATION} ${MATRIX_REGISTRATION_TOKEN} ${MATRIX_FEDERATION}' \
+    envsubst '${MATRIX_DOMAIN} ${CONDUIT_LISTEN_PORT}' < "$TEMPLATES_DIR/Caddyfile-matrix.tpl" >> /etc/caddy/Caddyfile
+    envsubst '${MATRIX_SERVER_NAME} ${MATRIX_ALLOW_REGISTRATION} ${MATRIX_REGISTRATION_TOKEN} ${MATRIX_FEDERATION} ${CONDUIT_LISTEN_PORT}' \
       < "$TEMPLATES_DIR/conduit.toml.tpl" > /etc/matrix-conduit/conduit.toml
     chown conduit:conduit /etc/matrix-conduit/conduit.toml
+    chmod 640 /etc/matrix-conduit/conduit.toml
   fi
+  unset AZURE_CLIENT_SECRET
+  unset SMTP_PASSWORD
 }
 
 # Detect input mode and load config vars
@@ -170,9 +175,11 @@ load_config() {
     parse_yaml "$CONFIG_FILE"
   elif [ ! -t 0 ]; then
     TMPFILE=$(mktemp)
+    trap 'rm -f "$TMPFILE"' EXIT
     cat > "$TMPFILE"
     parse_yaml "$TMPFILE"
     rm -f "$TMPFILE"
+    trap - EXIT
   else
     # Interactive mode: fall back to relay-config
     source /usr/local/lib/relay-validators.sh
