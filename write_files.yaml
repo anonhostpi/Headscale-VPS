@@ -3,7 +3,7 @@
   permissions: "0644"
 - path: /etc/relay-server/constants.conf
   permissions: "0644"
-- path: /etc/apt/preferences.d/headscale-pinning
+- path: /etc/apt/preferences.d/relay-pinning
   permissions: "0644"
 - path: /usr/local/lib/relay-common.sh
   permissions: "0644"
@@ -89,5 +89,5 @@
   permissions: "0644"
 - path: /etc/fail2ban/filter.d/matrix-auth.conf
   permissions: "0644"
-- path: /etc/fail2ban/jail.d/matrix.conf
+- path: /etc/fail2ban/jail.d/matrix-auth.conf
   permissions: "0644"
