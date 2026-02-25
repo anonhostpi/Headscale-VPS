@@ -16,6 +16,7 @@ while [[ $# -gt 0 ]]; do
   case $1 in
     --unattended) UNATTENDED=true; shift ;;
     --no-email) SEND_EMAIL=false; shift ;;
+    --skip-signature-check) SKIP_SIGNATURE_CHECK=true; shift ;;
     *) shift ;;
   esac
 done
@@ -135,7 +136,12 @@ update_headplane() {
 
   # Verify git tag signature if available
   if ! git tag -v "${latest}" 2>/dev/null; then
-    log "WARNING: Headplane tag ${latest} is not signed or signature verification failed"
+    log "ERROR: Headplane tag ${latest} is not signed or signature verification failed"
+    if [ "${SKIP_SIGNATURE_CHECK:-}" != "true" ]; then
+      log "  To skip verification, pass --skip-signature-check"
+      return 1
+    fi
+    log "WARNING: Proceeding without signature verification (--skip-signature-check)"
   else
     log "Headplane tag ${latest} signature verified"
   fi
