@@ -202,7 +202,7 @@ Internet
     │                              ├─ /api/* ─────────→ Headscale (port 8080)
     │                              ├─ /ts2021 ────────→ Headscale (port 8080)
     │                              ├─ /_matrix/* ─────→ Conduit   (port 6167)
-    │                              └─ /.well-known/* ─→ Conduit   (port 6167)
+    │                              └─ /.well-known/* ─→ Caddy     (static respond)
     │
     ├─ Port 22 (SSH) ──────────────→ OpenSSH (hardened)
     │
