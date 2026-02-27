@@ -2,9 +2,9 @@
 set -e
 
 # Load shared libraries
-source /usr/local/lib/headscale-common.sh
-source /usr/local/lib/headscale-validators.sh
-source /usr/local/lib/headscale-secrets.sh
+source /usr/local/lib/relay-common.sh
+source /usr/local/lib/relay-validators.sh
+source /usr/local/lib/relay-secrets.sh
 
 CONFIG_FILE="/etc/msmtprc"
 PASSWORD_FILE="/etc/msmtp-password"
@@ -54,8 +54,10 @@ print_success "Password saved to $PASSWORD_FILE"
 encrypt_secret_if_supported "$PASSWORD_FILE" "smtp_password"
 
 # Update msmtprc
-sed -i "s|^from.*|from           $SENDER_EMAIL|" "$CONFIG_FILE"
-sed -i "s|^user.*|user           $SMTP_USER|" "$CONFIG_FILE"
+SAFE_SENDER=$(printf '%s\n' "$SENDER_EMAIL" | sed 's/[&/\]/\\&/g')
+SAFE_USER=$(printf '%s\n' "$SMTP_USER" | sed 's/[&/\]/\\&/g')
+sed -i "s|^from.*|from           $SAFE_SENDER|" "$CONFIG_FILE"
+sed -i "s|^user.*|user           $SAFE_USER|" "$CONFIG_FILE"
 chmod 600 "$CONFIG_FILE"
 print_success "msmtp configuration updated"
 
@@ -73,7 +75,7 @@ read -p "Send test email? [Y/n] " SEND_TEST
 if [[ ! "$SEND_TEST" =~ ^[Nn]$ ]]; then
   echo "Sending test email..."
   HOSTNAME=$(hostname)
-  echo -e "Subject: Headscale VPS - Email Test\n\nThis is a test email from your Headscale VPS ($HOSTNAME).\n\nIf you received this, email notifications are working correctly.\n\nTimestamp: $(date)" | msmtp "$RECIPIENT_EMAIL"
+  echo -e "Subject: Relay Server - Email Test\n\nThis is a test email from your Relay Server ($HOSTNAME).\n\nIf you received this, email notifications are working correctly.\n\nTimestamp: $(date)" | msmtp "$RECIPIENT_EMAIL"
   if [ $? -eq 0 ]; then
     print_success "Test email sent to $RECIPIENT_EMAIL"
   else

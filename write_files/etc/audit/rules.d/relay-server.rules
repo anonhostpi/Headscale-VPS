@@ -1,0 +1,13 @@
+# Monitor config changes
+-w /etc/relay-server/ -p wa -k relay_config
+-w /etc/headscale/ -p wa -k headscale_config
+-w /etc/headplane/ -p wa -k headplane_config
+-w /etc/caddy/ -p wa -k caddy_config
+-w /etc/matrix-conduit/ -p wa -k matrix_config
+
+# Monitor data directory attribute changes (not writes - db writes would flood logs)
+-w /var/lib/matrix-conduit/ -p a -k matrix_data
+
+# Monitor secret access
+-w /var/lib/headscale/api_key -p r -k api_key_access
+-w /var/lib/headscale/oidc_client_secret -p r -k oidc_secret_access

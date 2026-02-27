@@ -1,27 +1,27 @@
 # This file maps each installation file to its permissions.
-- path: /etc/headscale/versions.conf
+- path: /etc/relay-server/versions.conf
   permissions: "0644"
-- path: /etc/headscale/constants.conf
+- path: /etc/relay-server/constants.conf
   permissions: "0644"
-- path: /etc/apt/preferences.d/headscale-pinning
+- path: /etc/apt/preferences.d/relay-pinning
   permissions: "0644"
-- path: /usr/local/lib/headscale-common.sh
+- path: /usr/local/lib/relay-common.sh
   permissions: "0644"
-- path: /usr/local/lib/headscale-validators.sh
+- path: /usr/local/lib/relay-validators.sh
   permissions: "0644"
-- path: /usr/local/lib/headscale-secrets.sh
+- path: /usr/local/lib/relay-secrets.sh
   permissions: "0644"
 - path: /etc/ssh/sshd_config.d/99-hardening.conf
   permissions: "0644"
 - path: /etc/sysctl.d/99-security.conf
   permissions: "0644"
-- path: /usr/local/bin/headscale-config
+- path: /usr/local/bin/relay-config
   permissions: "0755"
-- path: /etc/headscale/templates/headscale.yaml.tpl
+- path: /etc/relay-server/templates/headscale.yaml.tpl
   permissions: "0644"
-- path: /etc/headscale/templates/headplane.yaml.tpl
+- path: /etc/relay-server/templates/headplane.yaml.tpl
   permissions: "0644"
-- path: /etc/headscale/templates/Caddyfile.tpl
+- path: /etc/relay-server/templates/Caddyfile.tpl
   permissions: "0644"
 - path: /etc/systemd/system/headscale.service
   permissions: "0644"
@@ -29,29 +29,29 @@
   permissions: "0644"
 - path: /opt/install-headplane.sh
   permissions: "0755"
-- path: /usr/local/bin/headscale-rotate-apikey
+- path: /usr/local/bin/relay-rotate-apikey
   permissions: "0755"
-- path: /etc/cron.weekly/headscale-apikey-check
+- path: /etc/cron.weekly/relay-apikey-check
   permissions: "0755"
-- path: /usr/local/bin/headscale-migrate-secrets
+- path: /usr/local/bin/relay-migrate-secrets
   permissions: "0755"
-- path: /usr/local/bin/headscale-healthcheck
+- path: /usr/local/bin/relay-healthcheck
   permissions: "0755"
-- path: /etc/systemd/system/headscale-healthcheck.service
+- path: /etc/systemd/system/relay-healthcheck.service
   permissions: "0644"
-- path: /etc/systemd/system/headscale-healthcheck.timer
+- path: /etc/systemd/system/relay-healthcheck.timer
   permissions: "0644"
-- path: /etc/logrotate.d/headscale
+- path: /etc/logrotate.d/relay-server
   permissions: "0644"
 - path: /etc/msmtprc
   permissions: "0600"
-- path: /usr/local/bin/msmtp-config
+- path: /usr/local/bin/relay-msmtp-config
   permissions: "0755"
 - path: /etc/apt/apt.conf.d/50unattended-upgrades
   permissions: "0644"
 - path: /etc/apt/apt.conf.d/20auto-upgrades
   permissions: "0644"
-- path: /usr/local/bin/headscale-update
+- path: /usr/local/bin/relay-update
   permissions: "0755"
 - path: /etc/fail2ban/action.d/msmtp-mail.conf
   permissions: "0644"
@@ -67,9 +67,27 @@
   permissions: "0644"
 - path: /etc/fail2ban/jail.d/recidive.conf
   permissions: "0644"
-- path: /etc/audit/rules.d/headscale.rules
+- path: /etc/audit/rules.d/relay-server.rules
   permissions: "0644"
 - path: /opt/setup-headscale.sh
   permissions: "0755"
-- path: /usr/local/bin/headscale-user-setup
+- path: /usr/local/bin/relay-user-setup
   permissions: "0755"
+- path: /usr/local/bin/server-config
+  permissions: "0755"
+- path: /usr/local/bin/relay-matrix-create-bot
+  permissions: "0755"
+- path: /opt/install-yq.sh
+  permissions: "0755"
+- path: /opt/install-matrix.sh
+  permissions: "0755"
+- path: /etc/systemd/system/conduit.service
+  permissions: "0644"
+- path: /etc/relay-server/templates/Caddyfile-matrix.tpl
+  permissions: "0644"
+- path: /etc/relay-server/templates/conduit.toml.tpl
+  permissions: "0644"
+- path: /etc/fail2ban/filter.d/matrix-auth.conf
+  permissions: "0644"
+- path: /etc/fail2ban/jail.d/matrix-auth.conf
+  permissions: "0644"

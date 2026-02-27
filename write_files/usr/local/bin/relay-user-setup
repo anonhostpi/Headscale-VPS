@@ -1,6 +1,6 @@
 #!/bin/bash
-# headscale-user-setup - Setup ubuntu user with SSH access, then disable root SSH
-# Usage: headscale-user-setup [--non-interactive PASSWORD]
+# relay-user-setup - Setup ubuntu user with SSH access, then disable root SSH
+# Usage: relay-user-setup [--non-interactive PASSWORD]
 
 set -e
 
@@ -13,8 +13,13 @@ while [[ $# -gt 0 ]]; do
     case $1 in
         --non-interactive)
             NON_INTERACTIVE=true
-            PROVIDED_PASSWORD="$2"
-            shift 2
+            if [ -n "${2:-}" ]; then
+                PROVIDED_PASSWORD="$2"
+                shift 2
+            else
+                read -r PROVIDED_PASSWORD
+                shift
+            fi
             ;;
         -h|--help)
             echo "Usage: $SCRIPT_NAME [--non-interactive PASSWORD]"
@@ -22,7 +27,7 @@ while [[ $# -gt 0 ]]; do
             echo "Sets up the ubuntu user account with SSH access and disables root SSH."
             echo ""
             echo "Options:"
-            echo "  --non-interactive PASSWORD  Run without prompts using provided password"
+            echo "  --non-interactive [PASSWORD]  Run without prompts (reads from stdin if no PASSWORD)"
             echo "  -h, --help                  Show this help message"
             exit 0
             ;;
@@ -40,7 +45,7 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 echo "=========================================="
-echo "  Headscale VPS User Setup"
+echo "  Relay Server User Setup"
 echo "=========================================="
 echo ""
 

@@ -1,12 +1,28 @@
-# Headscale VPS
+# Coordination & Relay Server
 
-Production-ready deployment of [Headscale](https://github.com/juanfont/headscale) (self-hosted Tailscale control server) with [Headplane](https://github.com/tale/headplane) web UI on Ubuntu, using cloud-init for automated setup.
+Production-ready deployment of [Headscale](https://github.com/juanfont/headscale) (self-hosted Tailscale control server) with [Headplane](https://github.com/tale/headplane) web UI and [Conduit](https://forgejo.ellis.link/continuwuation/continuwuity) Matrix homeserver on Ubuntu, using cloud-init for automated setup.
+
+## Table of Contents
+- [Features](#features)
+- [Quick Start](#quick-start)
+- [Configuration](#configuration)
+- [Architecture](#architecture)
+- [Management](#management)
+- [Security Considerations](#security-considerations)
+- [Troubleshooting](#troubleshooting)
+- [Development & Testing](#development--testing)
+- [Version Pinning](#version-pinning)
+- [Backup & Recovery](#backup--recovery)
+- [Contributing](#contributing)
+- [License](#license)
+- [References](#references)
 
 ## Features
 
 ### Core Services
 - **Headscale** - Native installation (no containers) with automatic updates
 - **Headplane** - Web UI for Headscale management (built from source with Node.js)
+- **Conduit** - Matrix homeserver (Continuwuity fork) for private team messaging
 - **Caddy** - Reverse proxy with automatic TLS certificate management
 - **Azure AD OIDC** - Single sign-on authentication for both Headscale and Headplane
 
@@ -18,18 +34,20 @@ Production-ready deployment of [Headscale](https://github.com/juanfont/headscale
   - SSH jail (4 attempts, 24h ban)
   - OIDC authentication jail (5 attempts, 12h ban)
   - Headscale auth key jail (5 attempts, 12h ban)
+  - Matrix authentication jail (5 attempts, 12h ban)
   - Recidive jail for repeat offenders (3 violations, 1-week ban)
 - **Auditd** - Monitoring of configuration changes and secret access
 - **UFW Firewall** - Only essential ports exposed (22, 80, 443, 3478/udp)
 
 ### Automation & Maintenance
+- **Unified YAML Config** - Single `config.yaml` drives all service configuration via `server-config`
 - **Template-based Configuration** - Environment variables with envsubst for easy customization
 - **Automatic API Key Rotation** - Weekly checks, auto-renewal when <14 days remaining
 - **Controlled OS Updates** - Security-only unattended upgrades (no breaking changes)
 - **Application Updates** - Automatic Headscale/Headplane updates via GitHub releases
 - **Email Notifications** - Alerts for updates, fail2ban bans, and reboots (via M365 SMTP)
 - **Health Monitoring** - Systemd timer runs comprehensive checks every 5 minutes
-- **Checksum Verification** - All downloads (NVM, Headscale, Caddy) verified before installation
+- **Checksum Verification** - All downloads (NVM, Headscale, Caddy, Conduit, yq) verified before installation
 - **Error Handling** - Comprehensive error logging with context, no silent failures
 - **Input Validation** - RFC 5322 compliant email validation, domain validation, UUID validation
 
@@ -55,7 +73,7 @@ wget https://raw.githubusercontent.com/anonhostpi/Headscale-VPS/main/cloud-init.
 
 **Multipass (local testing):**
 ```bash
-multipass launch --name headscale --cloud-init cloud-init.yml \
+multipass launch --name relay-server --cloud-init cloud-init.yml \
   --memory 2G --disk 20G --cpus 2 22.04
 ```
 
@@ -65,20 +83,37 @@ multipass launch --name headscale --cloud-init cloud-init.yml \
 
 After cloud-init completes (~5-10 minutes), run these commands on your server:
 
+**Option 1: Unified YAML config (recommended)**
+
+Store `config.yaml` in your password manager for full server recovery:
+
+```bash
+# Pipe config directly from your password manager
+cat config.yaml | sudo server-config
+
+# Or pass as a file
+sudo server-config --config /path/to/config.yaml
+```
+
+See [config.yaml.example](config.yaml.example) for the full schema.
+
+**Option 2: Interactive wizard (legacy)**
+
 ```bash
 # 1. Configure Azure AD OIDC (required)
 #    First, set up Azure AD app registration (see AZURE_AD_SETUP.md)
-#    Then run the configuration wizard:
-sudo headscale-config
+sudo relay-config
 
-# 2. Verify services are running
+# 2. Configure email notifications (optional)
+sudo relay-msmtp-config
+```
+
+```bash
+# 3. Verify services are running
 systemctl status headscale
 systemctl status headplane
 systemctl status caddy
-
-# 3. Configure email notifications (optional)
-#    For fail2ban alerts and update notifications:
-sudo msmtp-config
+systemctl status conduit
 ```
 
 ### Azure AD Setup
@@ -91,7 +126,7 @@ Complete setup guide: [AZURE_AD_SETUP.md](AZURE_AD_SETUP.md)
    - `https://YOUR_DOMAIN/oidc/callback`
    - `https://YOUR_DOMAIN/admin/oidc/callback`
 3. Create client secret (save immediately!)
-4. Run `sudo headscale-config` with the credentials
+4. Include credentials in `config.yaml` and run `sudo server-config`
 
 See [AZURE_AD_SETUP.md](AZURE_AD_SETUP.md) for detailed step-by-step instructions and troubleshooting.
 
@@ -104,15 +139,70 @@ tailscale up --login-server https://YOUR_DOMAIN
 
 Your browser will open for Azure AD authentication.
 
+## Configuration
+
+### Unified YAML Config (server-config)
+
+All services are configured through a single YAML file. Store it in your password manager — it contains everything needed for full server recovery.
+
+```yaml
+# === Headscale VPN ===
+headscale:
+  domain: vpn.example.com
+  oidc:
+    tenant_id: contoso.onmicrosoft.com
+    client_id: 12345678-1234-1234-1234-123456789abc
+    client_secret: your-client-secret-here
+    allowed_email: user@example.com
+
+# === Matrix Homeserver ===
+matrix:
+  enabled: true
+  domain: matrix.example.com        # Public domain for Matrix
+  server_name: example.com          # User ID domain (@user:example.com)
+  federation: false                 # Disable for private servers
+  registration: token               # disabled | token | open
+  registration_token: null          # Auto-generated if null
+  admin_user: admin
+  admin_password: null              # Auto-generated if null
+
+# === Email Notifications ===
+smtp:
+  enabled: true
+  sender_email: alerts@example.com
+  recipient_email: admin@example.com
+  smtp_user: alerts@example.com
+  smtp_password: your-app-password-here
+
+# === Security ===
+security:
+  ssh_port: 22
+  fail2ban: true
+```
+
+**Usage:**
+```bash
+# From stdin (password manager integration)
+cat config.yaml | sudo server-config
+
+# From file
+sudo server-config --config /path/to/config.yaml
+
+# Interactive mode (falls back to relay-config wizard)
+sudo server-config
+```
+
 ## Architecture
 
 ```
 Internet
     │
-    ├─ Port 443 (HTTPS) ─→ Caddy ─┬─ /admin/* ──→ Headplane (port 3000)
-    │                              ├─ /oidc/* ───→ Headscale (port 8080)
-    │                              ├─ /api/* ────→ Headscale (port 8080)
-    │                              └─ /ts2021 ───→ Headscale (port 8080)
+    ├─ Port 443 (HTTPS) ─→ Caddy ─┬─ /admin/* ──────→ Headplane (port 3000)
+    │                              ├─ /oidc/* ────────→ Headscale (port 8080)
+    │                              ├─ /api/* ─────────→ Headscale (port 8080)
+    │                              ├─ /ts2021 ────────→ Headscale (port 8080)
+    │                              ├─ /_matrix/* ─────→ Conduit   (port 6167)
+    │                              └─ /.well-known/* ─→ Caddy     (static respond)
     │
     ├─ Port 22 (SSH) ──────────────→ OpenSSH (hardened)
     │
@@ -123,68 +213,93 @@ Internet
 
 | Path | Purpose |
 |------|---------|
+| `/etc/relay-server/` | Shared configuration (versions.conf, constants.conf) |
+| `/etc/relay-server/templates/` | Configuration templates (processed by envsubst) |
 | `/etc/headscale/` | Headscale configuration files |
-| `/etc/headscale/templates/` | Configuration templates (processed by envsubst) |
 | `/etc/headplane/` | Headplane configuration |
+| `/etc/matrix-conduit/` | Conduit Matrix homeserver configuration |
 | `/var/lib/headscale/` | Headscale database and secrets |
 | `/var/lib/headplane/` | Headplane data files |
+| `/var/lib/matrix-conduit/` | Conduit database |
 | `/opt/headplane/` | Headplane source and build |
 | `/var/log/headscale/` | Headscale and update logs |
-| `/usr/local/bin/headscale-*` | Management scripts |
-| `/usr/local/lib/headscale-*.sh` | Shared libraries |
+| `/var/log/matrix-conduit/` | Conduit logs |
+| `/usr/local/bin/relay-*` | Management scripts |
+| `/usr/local/lib/relay-*.sh` | Shared libraries |
 
 ## Management
 
 ### Configuration
 
 ```bash
-# Reconfigure OIDC settings
-sudo headscale-config
+# Reconfigure all services from YAML
+cat config.yaml | sudo server-config
+
+# Reconfigure interactively (OIDC only)
+sudo relay-config
 
 # Reconfigure email notifications
-sudo msmtp-config
+sudo relay-msmtp-config
 
 # Edit version pinning
-sudo nano /etc/headscale/versions.conf
+sudo nano /etc/relay-server/versions.conf
+```
+
+### Matrix Homeserver
+
+```bash
+# Check Conduit status
+systemctl status conduit
+
+# View Conduit logs
+journalctl -u conduit -f
+
+# Create a bot account (after Conduit is running)
+sudo relay-matrix-create-bot <username> <password>
+
+# Test Matrix API
+curl https://YOUR_MATRIX_DOMAIN/_matrix/client/versions
 ```
 
 ### Secrets Management
 
 ```bash
 # Check encryption status of secrets
-sudo headscale-migrate-secrets status
+sudo relay-migrate-secrets status
 
 # Manually migrate existing plaintext secrets to encrypted
-sudo headscale-migrate-secrets migrate
+sudo relay-migrate-secrets migrate
 
 # Rollback to plaintext secrets (if needed)
-sudo headscale-migrate-secrets rollback
+sudo relay-migrate-secrets rollback
 
 # After migration, restart services to use encrypted credentials
 sudo systemctl daemon-reload
 sudo systemctl restart headscale headplane
 ```
 
-**Note:** New deployments automatically encrypt secrets when you run `headscale-config` or `msmtp-config`. Manual migration is only needed for existing deployments.
+**Note:** New deployments automatically encrypt secrets when you run `relay-config` or `relay-msmtp-config`. Manual migration is only needed for existing deployments.
 
 ### Monitoring
 
 ```bash
 # Run health check manually
-sudo headscale-healthcheck
+sudo relay-healthcheck
 
 # Check health check timer status
-systemctl status headscale-healthcheck.timer
+systemctl status relay-healthcheck.timer
 
 # View service status
 systemctl status headscale
 systemctl status headplane
 systemctl status caddy
+systemctl status conduit
 
 # View logs
 journalctl -u headscale -f
 journalctl -u headplane -f
 journalctl -u caddy -f
+journalctl -u conduit -f
 
 # View update history
 cat /var/log/headscale/updates.log
@@ -199,15 +314,15 @@ cat /var/log/headscale/updates.log
 
 **Application Updates:**
 - Headscale and Headplane check for updates after OS updates
-- Updates are automatic unless version pinning is configured in `/etc/headscale/versions.conf`
+- Updates are automatic unless version pinning is configured in `/etc/relay-server/versions.conf`
 
 **Manual Updates:**
 ```bash
 # Check for and apply updates
-sudo /usr/local/bin/headscale-update
+sudo relay-update
 
 # Rotate API key manually
-sudo headscale-rotate-apikey
+sudo relay-rotate-apikey
 ```
 
 ### Maintenance
@@ -216,16 +331,19 @@ sudo headscale-rotate-apikey
 # View Fail2ban bans
 sudo fail2ban-client status sshd
 sudo fail2ban-client status caddy-oidc
+sudo fail2ban-client status matrix-auth
 
 # Unban an IP address
 sudo fail2ban-client set sshd unbanip 1.2.3.4
 
 # View audit logs for config changes
-sudo ausearch -k headscale_config
+sudo ausearch -k relay_config
 sudo ausearch -k oidc_secret_access
+sudo ausearch -k matrix_data
 
 # View disk usage
 df -h /var/lib/headscale
+df -h /var/lib/matrix-conduit
 ```
 
 ## Security Considerations
@@ -247,17 +365,17 @@ df -h /var/lib/headscale
 **Migration Commands:**
 ```bash
 # Check encryption status
-sudo headscale-migrate-secrets status
+sudo relay-migrate-secrets status
 
 # Migrate plaintext secrets to encrypted (automatic on new deployments)
-sudo headscale-migrate-secrets migrate
+sudo relay-migrate-secrets migrate
 
 # Rollback to plaintext if needed
-sudo headscale-migrate-secrets rollback
+sudo relay-migrate-secrets rollback
 ```
 
 **How It Works:**
-- When you run `headscale-config` or `msmtp-config`, secrets are automatically encrypted
+- When you run `relay-config` or `relay-msmtp-config`, secrets are automatically encrypted
 - Systemd services load encrypted credentials via `LoadCredentialEncrypted=` directives
 - Configuration files reference `/run/credentials/<service>/<secret_name>` paths
 - Secrets are bound to the machine ID for security
@@ -272,9 +390,10 @@ sudo headscale-migrate-secrets rollback
 ### Access Control
 
 - **SSH**: Key-based authentication only, root login disabled
-- **OIDC**: Azure AD controls who can authenticate
+- **OIDC**: Azure AD controls who can authenticate to Headscale/Headplane
 - **Headscale**: `allowed_users` list in configuration
 - **Headplane**: OIDC authentication required for admin UI
+- **Matrix**: Registration token required (configurable in config.yaml)
 
 ## Troubleshooting
 
@@ -290,13 +409,17 @@ headscale configtest
 
 # Check certificate status
 sudo caddy validate --config /etc/caddy/Caddyfile
+
+# Check Conduit
+systemctl status conduit
+journalctl -u conduit -n 50
 ```
 
 ### OIDC Authentication Failures
 
 ```bash
 # Check OIDC configuration
-cat /etc/environment.d/headscale.conf
+cat /etc/environment.d/relay-server.conf
 
 # Verify redirect URIs in Azure AD match your domain
 # Check Caddy logs for 401 errors
@@ -304,6 +427,26 @@ journalctl -u caddy -f | grep 401
 
 # Test OIDC endpoint
 curl -v https://YOUR_DOMAIN/oidc/.well-known/openid-configuration
+```
+
+### Matrix Issues
+
+```bash
+# Check Conduit is running
+systemctl status conduit
+
+# Test Matrix client API
+curl https://YOUR_MATRIX_DOMAIN/_matrix/client/versions
+
+# Test well-known discovery
+curl https://YOUR_MATRIX_DOMAIN/.well-known/matrix/client
+curl https://YOUR_MATRIX_DOMAIN/.well-known/matrix/server
+
+# View Conduit logs
+journalctl -u conduit -f
+
+# Check fail2ban for Matrix
+sudo fail2ban-client status matrix-auth
 ```
 
 ### Email Notifications Not Working
@@ -323,7 +466,7 @@ cat /var/log/msmtp.log
 
 ```bash
 # Check certificate expiry
-sudo headscale-healthcheck | grep -i cert
+sudo relay-healthcheck | grep -i cert
 
 # View Caddy certificate storage
 sudo ls -la /var/lib/caddy/.local/share/caddy/certificates/
@@ -340,7 +483,7 @@ For development and testing with Multipass VMs, see [TESTING.md](TESTING.md).
 
 **Default Configuration:** All dependencies are pinned to specific versions for security and reproducibility.
 
-Edit `/etc/headscale/versions.conf` to change versions:
+Edit `/etc/relay-server/versions.conf` to change versions:
 
 ```bash
 # Node.js LTS version for Headplane (exact version required)
@@ -354,6 +497,14 @@ HEADPLANE_VERSION="v0.6.0"
 
 # Headscale version (release version without 'v' prefix)
 HEADSCALE_VERSION="0.23.0"
+
+# Conduit version (Continuwuity release tag)
+CONDUIT_VERSION="v0.5.0"
+CONDUIT_SHA256="placeholder_update_before_deploy"
+
+# yq version (mikefarah/yq release tag)
+YQ_VERSION="v4.44.6"
+YQ_SHA256="placeholder_update_before_deploy"
 ```
 
 ### Upgrading Pinned Versions
@@ -372,40 +523,57 @@ HEADSCALE_VERSION="0.23.0"
 **Headscale:**
 1. Check releases at https://github.com/juanfont/headscale/releases
 2. Update `HEADSCALE_VERSION` in versions.conf
-3. Run: `sudo /usr/local/bin/headscale-update`
+3. Run: `sudo relay-update`
+
+**Conduit:**
+1. Check releases at https://forgejo.ellis.link/continuwuation/continuwuity/releases
+2. Get SHA256 from the release assets
+3. Update `CONDUIT_VERSION` and `CONDUIT_SHA256` in versions.conf
+4. Run: `sudo /opt/install-matrix.sh`
+
+**yq:**
+1. Check releases at https://github.com/mikefarah/yq/releases
+2. Get SHA256 for the linux amd64 binary
+3. Update `YQ_VERSION` and `YQ_SHA256` in versions.conf
+4. Run: `sudo /opt/install-yq.sh`
 
 **Caddy:**
 Caddy is pinned via APT preferences. To upgrade:
-1. Remove or update `/etc/apt/preferences.d/headscale-pinning`
+1. Remove or update `/etc/apt/preferences.d/relay-pinning`
 2. Run: `sudo apt-get update && sudo apt-get install caddy`
 3. Test thoroughly
 4. Re-add APT pinning if desired
 
 ### Security Benefits
 
-- ✅ Prevents unexpected breaking changes
-- ✅ Reproducible deployments
-- ✅ SHA256 verification for Node.js downloads
-- ✅ Checksum verification for Headscale downloads
-- ✅ APT pinning prevents Caddy auto-upgrades
+- Prevents unexpected breaking changes
+- Reproducible deployments
+- SHA256 verification for all binary downloads (Node.js, Headscale, Conduit, yq)
+- APT pinning prevents Caddy auto-upgrades
 
 ## Backup & Recovery
 
 ### Critical Files to Backup
 
+The `config.yaml` file (stored in your password manager) is the primary recovery artifact — it contains all credentials and configuration needed to redeploy from scratch via `cat config.yaml | sudo server-config`.
+
 ```bash
-# Configuration
-/etc/environment.d/headscale.conf
+# Configuration environment
+/etc/environment.d/relay-server.conf
+
+# Service configs
 /etc/headscale/config.yaml
 /etc/headplane/config.yaml
+/etc/matrix-conduit/conduit.toml
 
 # Secrets
 /var/lib/headscale/oidc_client_secret
 /var/lib/headscale/api_key
 /etc/msmtp-password
 
-# Database
+# Databases
 /var/lib/headscale/db.sqlite
+/var/lib/matrix-conduit/
 
 # DERP keys
 /var/lib/headscale/derp_private.key
@@ -416,17 +584,24 @@ Caddy is pinned via APT preferences. To upgrade:
 
 ```bash
 #!/bin/bash
-BACKUP_DIR="/backup/headscale-$(date +%Y%m%d)"
+BACKUP_DIR="/backup/relay-server-$(date +%Y%m%d)"
 mkdir -p "$BACKUP_DIR"
 
-# Backup database
-sqlite3 /var/lib/headscale/db.sqlite ".backup '$BACKUP_DIR/db.sqlite'"
+# Backup Headscale database
+sqlite3 /var/lib/headscale/db.sqlite ".backup '$BACKUP_DIR/headscale.sqlite'"
+
+# Backup Conduit database
+rsync -a /var/lib/matrix-conduit/ "$BACKUP_DIR/matrix-conduit/"
 
 # Backup configs and secrets
+# WARNING: This archive contains unencrypted secrets.
+# For production use, encrypt the archive:
+#   tar -czf - ... | gpg --symmetric --cipher-algo AES256 -o config.tar.gz.gpg
 tar -czf "$BACKUP_DIR/config.tar.gz" \
-  /etc/environment.d/headscale.conf \
+  /etc/environment.d/relay-server.conf \
   /etc/headscale/config.yaml \
   /etc/headplane/config.yaml \
+  /etc/matrix-conduit/conduit.toml \
   /var/lib/headscale/oidc_client_secret \
   /var/lib/headscale/api_key \
   /var/lib/headscale/*_private.key \
@@ -436,20 +611,22 @@ tar -czf "$BACKUP_DIR/config.tar.gz" \
 ## Contributing
 
 This project follows a technical debt reduction plan with 6 phases:
-- ✅ Phase 1: Critical Security Fixes
-- ✅ Phase 2: Testing Infrastructure
-- ⏳ Phase 3: Secrets Management (systemd-creds)
-- ⏳ Phase 4: Dependency Pinning
-- ✅ Phase 5: Code Organization (in progress)
-- ⏳ Phase 6: Documentation & Validation
+- Phase 1: Critical Security Fixes
+- Phase 2: Testing Infrastructure
+- Phase 3: Secrets Management (systemd-creds)
+- Phase 4: Dependency Pinning
+- Phase 5: Code Organization (in progress)
+- Phase 6: Documentation & Validation
 
 ## License
 
-This configuration is provided as-is for self-hosting Headscale. Headscale and Headplane are separate projects with their own licenses.
+This configuration is provided as-is for self-hosting. Headscale, Headplane, and Conduit are separate projects with their own licenses.
 
 ## References
 
 - [Headscale Documentation](https://headscale.net/)
 - [Headplane Documentation](https://github.com/tale/headplane)
+- [Continuwuity Documentation](https://forgejo.ellis.link/continuwuation/continuwuity)
 - [Tailscale Documentation](https://tailscale.com/kb/)
 - [Azure AD OIDC Documentation](https://learn.microsoft.com/en-us/azure/active-directory/develop/v2-protocols-oidc)
+- [yq Documentation](https://mikefarah.gitbook.io/yq/)

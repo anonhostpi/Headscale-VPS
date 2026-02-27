@@ -166,7 +166,7 @@ multipass exec headscale-test -- sudo systemctl status caddy
 multipass exec headscale-test -- sudo systemctl status fail2ban
 
 # 3. Run health check
-multipass exec headscale-test -- sudo headscale-healthcheck
+multipass exec headscale-test -- sudo relay-healthcheck
 
 # Expected: All services running, health check passes
 ```
@@ -205,7 +205,7 @@ multipass exec headscale-test -- headscale version
 multipass exec headscale-test -- cat /opt/headplane/package.json | grep version
 
 # 3. Force update check
-multipass exec headscale-test -- sudo /usr/local/bin/headscale-update
+multipass exec headscale-test -- sudo /usr/local/bin/relay-update
 
 # 4. Verify update log
 multipass exec headscale-test -- cat /var/log/headscale/updates.log
@@ -247,7 +247,7 @@ multipass exec headscale-test -- sudo ausearch -k headscale_config
 multipass exec headscale-test -- cat /var/lib/headscale/api_key_expires
 
 # 3. Rotate manually
-multipass exec headscale-test -- sudo headscale-rotate-apikey
+multipass exec headscale-test -- sudo relay-rotate-apikey
 
 # 4. Verify new expiry date
 multipass exec headscale-test -- cat /var/lib/headscale/api_key_expires
@@ -387,10 +387,10 @@ multipass exec headscale-test -- sudo systemctl restart caddy
 
 ```powershell
 # View current configuration
-multipass exec headscale-test -- cat /etc/environment.d/headscale.conf
+multipass exec headscale-test -- cat /etc/environment.d/relay-server.conf
 
 # Reconfigure manually
-multipass exec headscale-test -- sudo headscale-config
+multipass exec headscale-test -- sudo server-config
 
 # Verify template processing
 multipass exec headscale-test -- cat /etc/headscale/config.yaml
@@ -475,7 +475,7 @@ try {
     Start-Sleep -Seconds 30
 
     # Run health check
-    $health = multipass exec ci-test -- sudo headscale-healthcheck
+    $health = multipass exec ci-test -- sudo relay-healthcheck
     if ($LASTEXITCODE -ne 0) {
         throw "Health check failed"
     }

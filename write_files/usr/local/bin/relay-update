@@ -16,6 +16,7 @@ while [[ $# -gt 0 ]]; do
   case $1 in
     --unattended) UNATTENDED=true; shift ;;
     --no-email) SEND_EMAIL=false; shift ;;
+    --skip-signature-check) SKIP_SIGNATURE_CHECK=true; shift ;;
     *) shift ;;
   esac
 done
@@ -34,6 +35,32 @@ get_installed_headplane_version() {
   else
     echo "not-installed"
   fi
+}
+
+get_installed_conduit_version() {
+  if [ -f /usr/local/bin/matrix-conduit ]; then
+    /usr/local/bin/matrix-conduit --version 2>/dev/null | grep -oP 'v\d+\.\d+\.\d+' | head -1 || echo "unknown"
+  else
+    echo "not-installed"
+  fi
+}
+
+update_conduit() {
+  local current="$1"
+  local latest="$2"
+  log "Updating Conduit: $current -> $latest"
+  ARCH="$(uname -m)"
+  case "$ARCH" in
+    x86_64)  CONDUIT_ARCH="x86_64" ;;
+    aarch64) CONDUIT_ARCH="aarch64" ;;
+    *) log "ERROR: Unsupported architecture: $ARCH"; return 1 ;;
+  esac
+  local url="https://forgejo.ellis.link/continuwuation/continuwuity/releases/download/${latest}/conduit-${CONDUIT_ARCH}-unknown-linux-musl"
+  wget -q "$url" -O /tmp/matrix-conduit
+  install -m 0755 /tmp/matrix-conduit /usr/local/bin/matrix-conduit
+  rm -f /tmp/matrix-conduit
+  systemctl restart conduit
+  log "Conduit updated successfully"
 }
 
 get_latest_github_release() {
@@ -106,6 +133,19 @@ update_headplane() {
   
   # Fetch and checkout new version
   git fetch --all --tags
+
+  # Verify git tag signature if available
+  if ! git tag -v "${latest}" 2>/dev/null; then
+    log "ERROR: Headplane tag ${latest} is not signed or signature verification failed"
+    if [ "${SKIP_SIGNATURE_CHECK:-}" != "true" ]; then
+      log "  To skip verification, pass --skip-signature-check"
+      return 1
+    fi
+    log "WARNING: Proceeding without signature verification (--skip-signature-check)"
+  else
+    log "Headplane tag ${latest} signature verified"
+  fi
+
   git checkout "${latest}"
   
   # Rebuild
@@ -114,7 +154,7 @@ update_headplane() {
   # Build WASM module for SSH functionality (required for v0.6.1+)
   export GOPATH=/tmp/go
   export GOMODCACHE=/tmp/go/pkg/mod
-  cat "$(go env GOROOT)/lib/wasm/wasm_exec.js" >> app/wasm_exec.js
+  cat "$(go env GOROOT)/lib/wasm/wasm_exec.js" > app/wasm_exec.js
   GOOS=js GOARCH=wasm go build -o app/hp_ssh.wasm ./cmd/hp_ssh
 
   # Build Node.js application
@@ -145,8 +185,8 @@ main() {
   log "=========================================="
 
   # Load version configuration
-  if [ -f /etc/headscale/versions.conf ]; then
-    source /etc/headscale/versions.conf
+  if [ -f /etc/relay-server/versions.conf ]; then
+    source /etc/relay-server/versions.conf
   fi
 
   REPORT=""
@@ -206,14 +246,34 @@ main() {
       REPORT="${REPORT}Headplane: v$CURRENT_HP [up-to-date]\n"
     fi
   fi
-  
+
+  # Check Conduit (only if installed)
+  if [ -f /usr/local/bin/matrix-conduit ]; then
+    CURRENT_CD=$(get_installed_conduit_version)
+    LATEST_CD=""
+    if [ -n "${CONDUIT_VERSION:-}" ]; then
+      LATEST_CD="${CONDUIT_VERSION}"
+      log "Using pinned Conduit version: $LATEST_CD"
+    fi
+    log "Conduit: installed=$CURRENT_CD, target=${LATEST_CD:-none}"
+    if [ -n "$LATEST_CD" ] && [ "$CURRENT_CD" != "$LATEST_CD" ]; then
+      if update_conduit "$CURRENT_CD" "$LATEST_CD"; then
+        REPORT="${REPORT}Conduit: $CURRENT_CD -> $LATEST_CD [OK]\n"
+        UPDATES_PERFORMED=true
+      else
+        REPORT="${REPORT}Conduit: $CURRENT_CD -> $LATEST_CD [FAILED]\n"
+        ERRORS="${ERRORS}Conduit update failed\n"
+      fi
+    fi
+  fi
+
   log "Update check complete"
   
   # Send email report if updates were performed or errors occurred
   if [ "$UPDATES_PERFORMED" = true ] || [ -n "$ERRORS" ]; then
     HOSTNAME=$(hostname)
-    SUBJECT="Headscale VPS ($HOSTNAME) - Update Report"
-    BODY="Headscale VPS Update Report\n"
+    SUBJECT="Relay Server ($HOSTNAME) - Update Report"
+    BODY="Relay Server Update Report\n"
     BODY="${BODY}============================\n"
     BODY="${BODY}Host: $HOSTNAME\n"
     BODY="${BODY}Time: $(date)\n\n"

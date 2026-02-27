@@ -559,7 +559,7 @@ function Configure-Headscale {
 
     # Call the existing headscale-config script with environment variables
     # Use bash -c to avoid stdin issues
-    $cmd = "export HEADSCALE_DOMAIN='$($Options.Domain)'; export AZURE_TENANT_ID='$($Options.AzureTenantID)'; export AZURE_CLIENT_ID='$($Options.AzureClientID)'; export AZURE_CLIENT_SECRET='$($Options.AzureClientSecret)'; export ALLOWED_EMAIL='$($Options.AzureAllowedEmail)'; /usr/local/bin/headscale-config"
+    $cmd = "export HEADSCALE_DOMAIN='$($Options.Domain)'; export AZURE_TENANT_ID='$($Options.AzureTenantID)'; export AZURE_CLIENT_ID='$($Options.AzureClientID)'; export AZURE_CLIENT_SECRET='$($Options.AzureClientSecret)'; export ALLOWED_EMAIL='$($Options.AzureAllowedEmail)'; /usr/local/bin/server-config"
 
     try {
         multipass exec $Options.Name -- sudo bash -c $cmd
@@ -777,7 +777,7 @@ function Show-HeadscaleHealth {
     )
 
     Write-Host "Headscale Health Check:" -ForegroundColor Cyan
-    multipass exec $Options.Name -- sudo headscale-healthcheck
+    multipass exec $Options.Name -- sudo relay-healthcheck
     Write-Host ""
 }
 

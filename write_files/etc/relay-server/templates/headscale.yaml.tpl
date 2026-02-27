@@ -1,6 +1,6 @@
 # Headscale Configuration - Production
 # Generated from template - do not edit directly
-# Run 'sudo headscale-config' to regenerate
+# Run 'sudo server-config' to regenerate
 
 server_url: https://${HEADSCALE_DOMAIN}
 listen_addr: 127.0.0.1:8080

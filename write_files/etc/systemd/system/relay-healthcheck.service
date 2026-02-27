@@ -1,0 +1,10 @@
+[Unit]
+Description=Relay Server Health Check
+After=headscale.service caddy.service conduit.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/relay-healthcheck
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=relay-healthcheck

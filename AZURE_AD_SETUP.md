@@ -91,7 +91,7 @@ Both formats work - the deployment scripts accept either.
 SSH into your Headscale server and run:
 
 ```bash
-sudo headscale-config
+sudo server-config
 ```
 
 The wizard will prompt for:
@@ -123,7 +123,7 @@ The wizard will:
 After configuration completes, check service status:
 
 ```bash
-sudo headscale-healthcheck
+sudo relay-healthcheck
 ```
 
 Expected output:
@@ -172,7 +172,7 @@ Expected behavior:
 **Azure AD client secrets expire.** When yours is close to expiration:
 
 1. Create a new client secret in Azure AD (Step 3)
-2. Run `sudo headscale-config` on your server
+2. Run `sudo server-config` on your server
 3. Enter the new secret value
 4. The old secret remains valid until it expires (zero downtime)
 
@@ -183,12 +183,12 @@ Expected behavior:
 The Headscale API key (used by Headplane) auto-rotates:
 - **Schedule**: Weekly cron job checks expiration
 - **Threshold**: Auto-rotates if <14 days remain
-- **Manual rotation**: `sudo headscale-rotate-apikey`
+- **Manual rotation**: `sudo relay-rotate-apikey`
 
 ### User Access Control
 
 **Method 1: Headscale Configuration (Initial Setup)**
-Edit the allowed users list during initial configuration via `headscale-config`.
+Edit the allowed users list during initial configuration via `server-config`.
 
 **Method 2: Headplane UI (After Deployment)**
 1. Log into Headplane: `https://YOUR_DOMAIN/admin`
@@ -259,7 +259,7 @@ sudo systemctl restart headscale
 **Solutions:**
 1. Verify Tenant ID is correct in configuration:
    ```bash
-   sudo grep AZURE_TENANT_ID /etc/environment.d/headscale.conf
+   sudo grep AZURE_TENANT_ID /etc/environment.d/relay-server.conf
    ```
 2. Check system time is synchronized:
    ```bash
@@ -287,7 +287,7 @@ sudo systemctl restart headscale
    ```
 3. View certificate expiry:
    ```bash
-   sudo headscale-healthcheck | grep -i cert
+   sudo relay-healthcheck | grep -i cert
    ```
 4. Force certificate renewal (if needed):
    ```bash
@@ -313,7 +313,7 @@ To allow users from multiple Azure AD tenants:
    ```
 3. Regenerate configuration:
    ```bash
-   sudo headscale-config
+   sudo server-config
    ```
 
 **Security Note**: Multi-tenant mode allows any Azure AD user to attempt login. Use `allowed_users` list strictly.
@@ -361,22 +361,22 @@ Permissions: Microsoft Graph → User.Read
 
 **Configuration Command:**
 ```bash
-sudo headscale-config
+sudo server-config
 ```
 
 **Health Check:**
 ```bash
-sudo headscale-healthcheck
+sudo relay-healthcheck
 ```
 
 **API Key Rotation:**
 ```bash
-sudo headscale-rotate-apikey
+sudo relay-rotate-apikey
 ```
 
 **View Configuration:**
 ```bash
-cat /etc/environment.d/headscale.conf
+cat /etc/environment.d/relay-server.conf
 cat /etc/headscale/config.yaml | grep -A 10 oidc
 ```
 

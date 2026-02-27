@@ -1,10 +1,10 @@
 #!/bin/bash
-# secrets.sh - Shared secret management functions for Headscale VPS
+# relay-secrets.sh - Shared secret management functions for Headscale VPS
 # Provides systemd-creds encryption with graceful degradation
 
 # Load constants (if available, skip if already loaded to avoid readonly errors)
-if [ -z "$SYSTEMD_MIN_VERSION" ] && [ -f /etc/headscale/constants.conf ]; then
-  source /etc/headscale/constants.conf
+if [ -z "$SYSTEMD_MIN_VERSION" ] && [ -f /etc/relay-server/constants.conf ]; then
+  source /etc/relay-server/constants.conf
 fi
 
 # Local constants
@@ -73,7 +73,7 @@ encrypt_secret_if_supported() {
   if [ $encrypt_error -eq 0 ]; then
     chmod 600 "$encrypted_file"
 
-    # Use print_success if available (from headscale-common.sh)
+    # Use print_success if available (from relay-common.sh)
     if command -v print_success >/dev/null 2>&1; then
       print_success "Encrypted $cred_name using systemd-creds"
     else
@@ -90,7 +90,8 @@ encrypt_secret_if_supported() {
     fi
 
     if [ -n "$encrypt_output" ]; then
-      echo "  Error details: $encrypt_output" >&2
+      echo "  Encryption failed for $cred_name. Check systemd-creds configuration." >&2
+      logger -t relay-secrets "systemd-creds encrypt failed for $cred_name: $encrypt_output"
     fi
 
     chmod 600 "$plain_file"

@@ -3,7 +3,7 @@
 # Runs every 5 minutes via systemd timer
 
 # Load constants
-source /etc/headscale/constants.conf
+source /etc/relay-server/constants.conf
 
 HEALTH_STATUS=0
 REPORT=""
@@ -43,8 +43,8 @@ check_api_endpoint() {
 
 # Check TLS certificate expiry
 check_cert_expiry() {
-  if [ -f /etc/environment.d/headscale.conf ]; then
-    DOMAIN=$(grep HEADSCALE_DOMAIN /etc/environment.d/headscale.conf | cut -d= -f2 | tr -d '"' 2>/dev/null)
+  if [ -f /etc/environment.d/relay-server.conf ]; then
+    DOMAIN=$(grep HEADSCALE_DOMAIN /etc/environment.d/relay-server.conf | cut -d= -f2 | tr -d '"' 2>/dev/null)
     if [ -n "$DOMAIN" ]; then
       CERT="/var/lib/caddy/.local/share/caddy/certificates/acme-v02.api.letsencrypt.org-directory/${DOMAIN}/${DOMAIN}.crt"
 
@@ -97,6 +97,16 @@ check_disk_space() {
   fi
 }
 
+# Check Matrix C-S API endpoint
+check_matrix_api() {
+  if curl -sf "http://localhost:${CONDUIT_LISTEN_PORT}/_matrix/client/versions" >/dev/null 2>&1; then
+    REPORT="${REPORT}✓ Matrix C-S API is reachable\n"
+  else
+    REPORT="${REPORT}✗ Matrix C-S API is NOT reachable\n"
+    HEALTH_STATUS=1
+  fi
+}
+
 # Run all checks
 check_service headscale
 check_service caddy
@@ -107,6 +117,13 @@ check_api_endpoint
 check_cert_expiry
 check_api_key_expiry
 check_disk_space
+
+# Conduit checks (only if conduit service exists)
+if systemctl list-unit-files conduit.service 2>/dev/null | grep -q "conduit.service"; then
+  check_service conduit
+  check_port "${CONDUIT_LISTEN_PORT}" "Matrix Conduit"
+  check_matrix_api
+fi
 
 # Output report
 echo -e "=========================================="

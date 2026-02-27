@@ -1,0 +1,30 @@
+#!/bin/bash
+# matrix-create-bot - Create a Matrix bot account using registration token
+# Usage: matrix-create-bot <username> <password>
+set -e
+
+ENV_FILE="/etc/environment.d/relay-server.conf"
+[ -f "$ENV_FILE" ] && source "$ENV_FILE"
+
+USERNAME="$1"
+PASSWORD="$2"
+
+if [ -z "$USERNAME" ] || [ -z "$PASSWORD" ]; then
+  echo "Usage: $0 <username> <password>" && exit 1
+fi
+
+if [ -z "$MATRIX_DOMAIN" ] || [ -z "$MATRIX_REGISTRATION_TOKEN" ]; then
+  echo "ERROR: MATRIX_DOMAIN and MATRIX_REGISTRATION_TOKEN must be set in $ENV_FILE"
+  exit 1
+fi
+
+json_payload=$(jq -n \
+  --arg token "$MATRIX_REGISTRATION_TOKEN" \
+  --arg user "$USERNAME" \
+  --arg pass "$PASSWORD" \
+  '{ auth: { type: "m.login.registration_token", token: $token, session: "" }, username: $user, password: $pass }')
+curl -fsSL -X POST -H "Content-Type: application/json" -d "$json_payload" \
+  "https://${MATRIX_DOMAIN}/_matrix/client/v3/register"
+
+echo ""
+echo "Bot account '${USERNAME}' created successfully."

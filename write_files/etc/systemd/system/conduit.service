@@ -1,0 +1,43 @@
+[Unit]
+Description=Conduit Matrix Homeserver
+ConditionPathExists=/etc/matrix-conduit/conduit.toml
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=conduit
+Group=conduit
+Environment=CONDUIT_CONFIG=/etc/matrix-conduit/conduit.toml
+ExecStart=/usr/local/bin/matrix-conduit
+Restart=always
+RestartSec=5
+StandardOutput=append:/var/log/matrix-conduit/conduit.log
+StandardError=append:/var/log/matrix-conduit/conduit.log
+
+# Hardening (matches headscale.service)
+# Note: Conduit reads secrets from conduit.toml directly (no credential support).
+# Ensure conduit.toml has restrictive permissions (0640 conduit:conduit).
+# See also: server-config process_templates() for file permission handling.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/matrix-conduit /var/log/matrix-conduit
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictRealtime=true
+CapabilityBoundingSet=
+SystemCallFilter=@system-service
+SystemCallArchitectures=native
+PrivateDevices=true
+ProtectClock=true
+ProtectHostname=true
+
+[Install]
+WantedBy=multi-user.target

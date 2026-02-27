@@ -1,5 +1,5 @@
 [Unit]
-Description=Run Headscale Health Check every 5 minutes
+Description=Run Relay Server Health Check every 5 minutes
 
 [Timer]
 OnBootSec=5min

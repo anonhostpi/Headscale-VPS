@@ -1,0 +1,21 @@
+/var/log/headscale/*.log {
+    daily
+    rotate 7
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0640 headscale headscale
+    copytruncate
+}
+
+/var/log/matrix-conduit/*.log {
+    daily
+    rotate 7
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0640 conduit conduit
+    copytruncate
+}

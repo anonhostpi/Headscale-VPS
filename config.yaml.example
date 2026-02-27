@@ -1,0 +1,37 @@
+# Coordination & Relay Server Configuration
+# Store this in your password manager for full server recovery
+# Usage: cat config.yaml | sudo server-config
+#        sudo server-config --config config.yaml
+
+# === Headscale VPN ===
+headscale:
+  domain: vpn.example.com              # Public domain for Headscale
+  oidc:
+    tenant_id: contoso.onmicrosoft.com  # Azure AD tenant (GUID or *.onmicrosoft.com)
+    client_id: 12345678-1234-1234-1234-123456789abc  # Azure app client ID
+    client_secret: your-client-secret-here           # Azure app client secret
+    allowed_email: user@example.com                  # Allowed login email
+
+# === Matrix Messaging ===
+matrix:
+  enabled: true                         # Install and configure Matrix
+  domain: matrix.example.com            # Public domain for Matrix (Caddy listens here)
+  server_name: example.com              # User ID domain (@user:example.com)
+  federation: false                     # Disable federation (private server)
+  registration: token                   # disabled | token | open
+  registration_token: null              # Auto-generated if empty and registration=token
+  admin_user: admin                     # TODO: Not yet implemented (requires Conduit admin API)
+  admin_password: null                  # TODO: Not yet implemented
+
+# === Email Notifications ===
+smtp:
+  enabled: true                         # Configure SMTP email
+  sender_email: alerts@example.com      # M365 SMTP sender
+  recipient_email: admin@example.com    # Where alerts go
+  smtp_user: alerts@example.com         # SMTP login (usually same as sender)
+  smtp_password: your-app-password-here # M365 app password
+
+# === Security ===
+security:
+  ssh_port: 22                          # Informational only (configured in cloud-init)
+  fail2ban: true                        # Informational only (configured in cloud-init)

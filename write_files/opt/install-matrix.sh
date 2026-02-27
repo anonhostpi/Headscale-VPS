@@ -1,0 +1,75 @@
+#!/bin/bash
+set -e
+
+echo "=========================================="
+echo "  Installing Matrix Homeserver (Conduit)"
+echo "=========================================="
+
+# Load version configuration
+source /etc/relay-server/versions.conf
+
+CONDUIT_VERSION="${CONDUIT_VERSION:-v0.5.0}"
+CONDUIT_SHA256="${CONDUIT_SHA256:-}"
+
+ARCH="$(uname -m)"
+case "$ARCH" in
+  x86_64)  CONDUIT_ARCH="x86_64" ;;
+  aarch64) CONDUIT_ARCH="aarch64" ;;
+  *) echo "ERROR: Unsupported architecture: $ARCH"; exit 1 ;;
+esac
+
+BINARY_URL="https://forgejo.ellis.link/continuwuation/continuwuity/releases/download/${CONDUIT_VERSION}/conduit-${CONDUIT_ARCH}-unknown-linux-musl"
+
+# Create conduit system user
+echo "[1/5] Creating conduit user..."
+if ! id -u conduit > /dev/null 2>&1; then
+  useradd --system --home /var/lib/matrix-conduit --shell /usr/sbin/nologin conduit
+fi
+
+# Create data and log directories
+echo "[2/5] Creating directories..."
+mkdir -p /var/lib/matrix-conduit
+mkdir -p /var/log/matrix-conduit
+mkdir -p /etc/matrix-conduit
+chown -R conduit:conduit /var/lib/matrix-conduit
+chown -R conduit:conduit /var/log/matrix-conduit
+chown -R conduit:conduit /etc/matrix-conduit
+
+# Download Conduit binary with SHA256 verification
+echo "[3/5] Downloading Conduit ${CONDUIT_VERSION}..."
+wget -q "$BINARY_URL" -O /tmp/matrix-conduit
+
+if [ -z "$CONDUIT_SHA256" ] || [ "$CONDUIT_SHA256" = "REPLACE_BEFORE_DEPLOY" ]; then
+  echo "WARNING: No Conduit SHA256 checksum configured in versions.conf"
+  echo "  Binary integrity cannot be verified. Set CONDUIT_SHA256 before production deploy."
+  if [ "$CONDUIT_SHA256" = "REPLACE_BEFORE_DEPLOY" ]; then
+    echo "ERROR: CONDUIT_SHA256 has sentinel value -- update versions.conf with the real hash"
+    rm -f /tmp/matrix-conduit
+    exit 1
+  fi
+else
+  echo "${CONDUIT_SHA256}  /tmp/matrix-conduit" | sha256sum -c - || {
+    echo "ERROR: Conduit binary checksum verification failed!"
+    rm -f /tmp/matrix-conduit
+    exit 1
+  }
+  echo "    Checksum verified: OK"
+fi
+
+# Install binary and enable service
+echo "[4/5] Installing Conduit binary..."
+install -m 0755 /tmp/matrix-conduit /usr/local/bin/matrix-conduit
+rm -f /tmp/matrix-conduit
+
+echo "[5/5] Registering Conduit service..."
+systemctl daemon-reload
+echo "  Conduit installed but not enabled."
+echo "  Run 'sudo server-config' to configure and enable Matrix."
+
+echo ""
+echo "=========================================="
+echo "  Conduit Installation Complete"
+echo "=========================================="
+echo ""
+echo "  Run 'sudo server-config' to configure Matrix."
+echo ""

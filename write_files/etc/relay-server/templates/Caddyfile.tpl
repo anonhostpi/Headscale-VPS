@@ -1,6 +1,6 @@
 # Caddyfile - Reverse proxy for Headscale + Headplane
 # Generated from template - do not edit directly
-# Run 'sudo headscale-config' to regenerate
+# Run 'sudo server-config' to regenerate
 
 ${HEADSCALE_DOMAIN} {
     encode gzip

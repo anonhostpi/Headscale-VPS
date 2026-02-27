@@ -1,6 +1,6 @@
 # Headplane Configuration - Production
 # Generated from template - do not edit directly
-# Run 'sudo headscale-config' to regenerate
+# Run 'sudo server-config' to regenerate
 
 # NOTE: Headplane data is owned by headscale user for simplicity
 # since this VPS's sole purpose is running Headscale + Headplane

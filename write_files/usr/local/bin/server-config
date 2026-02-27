@@ -1,0 +1,213 @@
+#!/bin/bash
+set -e
+# server-config - Unified YAML-driven configuration wizard
+# Usage: cat config.yaml | sudo server-config
+#        sudo server-config --config /path/to/config.yaml
+#        sudo server-config  (interactive prompts)
+
+source /usr/local/lib/relay-common.sh
+source /usr/local/lib/relay-secrets.sh
+source /usr/local/lib/relay-validators.sh
+
+TEMPLATES_DIR="/etc/relay-server/templates"
+ENV_FILE="/etc/environment.d/relay-server.conf"
+CONFIG_FILE=""
+
+while [[ $# -gt 0 ]]; do
+  case $1 in --config) CONFIG_FILE="$2"; shift 2 ;; *) shift ;; esac
+done
+
+# Parse YAML config using yq and export variables
+parse_yaml() {
+  local yaml_file="$1"
+  HEADSCALE_DOMAIN=$(yq '.headscale.domain // ""' "$yaml_file")
+  AZURE_TENANT_ID=$(yq '.headscale.oidc.tenant_id // ""' "$yaml_file")
+  AZURE_CLIENT_ID=$(yq '.headscale.oidc.client_id // ""' "$yaml_file")
+  AZURE_CLIENT_SECRET=$(yq '.headscale.oidc.client_secret // ""' "$yaml_file")
+  ALLOWED_EMAIL=$(yq '.headscale.oidc.allowed_email // ""' "$yaml_file")
+  MATRIX_ENABLED=$(yq '.matrix.enabled // "false"' "$yaml_file")
+  MATRIX_DOMAIN=$(yq '.matrix.domain // ""' "$yaml_file")
+  MATRIX_SERVER_NAME=$(yq '.matrix.server_name // ""' "$yaml_file")
+  MATRIX_FEDERATION=$(yq '.matrix.federation // "false"' "$yaml_file")
+  MATRIX_ALLOW_REGISTRATION=$(yq '.matrix.registration != "disabled"' "$yaml_file")
+  MATRIX_REGISTRATION_TOKEN=$(yq '.matrix.registration_token // ""' "$yaml_file")
+  SMTP_SENDER=$(yq '.smtp.sender_email // ""' "$yaml_file")
+  SMTP_RECIPIENT=$(yq '.smtp.recipient_email // ""' "$yaml_file")
+  SMTP_USER=$(yq '.smtp.smtp_user // ""' "$yaml_file")
+  SMTP_PASSWORD=$(yq '.smtp.smtp_password // ""' "$yaml_file")
+}
+
+validate_inputs() {
+  validate_domain "$HEADSCALE_DOMAIN" || { print_error "Invalid domain: $HEADSCALE_DOMAIN"; return 1; }
+  validate_uuid "$AZURE_TENANT_ID" || { print_error "Invalid tenant ID: $AZURE_TENANT_ID"; return 1; }
+  validate_uuid "$AZURE_CLIENT_ID" || { print_error "Invalid client ID: $AZURE_CLIENT_ID"; return 1; }
+  validate_email "$ALLOWED_EMAIL" || { print_error "Invalid email: $ALLOWED_EMAIL"; return 1; }
+  if [ "${MATRIX_ENABLED:-false}" = "true" ]; then
+    validate_domain "$MATRIX_DOMAIN" || { print_error "Invalid Matrix domain: $MATRIX_DOMAIN"; return 1; }
+    validate_domain "$MATRIX_SERVER_NAME" || { print_error "Invalid Matrix server name: $MATRIX_SERVER_NAME"; return 1; }
+  fi
+  if [ -n "$SMTP_SENDER" ]; then
+    validate_email "$SMTP_SENDER" || { print_error "Invalid SMTP sender: $SMTP_SENDER"; return 1; }
+  fi
+  if [ -n "$SMTP_RECIPIENT" ]; then
+    validate_email "$SMTP_RECIPIENT" || { print_error "Invalid SMTP recipient: $SMTP_RECIPIENT"; return 1; }
+  fi
+}
+
+resolve_domain_ip() {
+  local domain="$1"; local ip
+  if [ -z "$ip" ] && command -v nslookup &>/dev/null; then
+    ip=$(nslookup "$domain" 2>/dev/null | awk '/^Address: / {print $2}' | grep -E '^[0-9]+' | head -1)
+  fi
+  if [ -z "$ip" ] && command -v dig &>/dev/null; then
+    ip=$(dig +short "$domain" A | grep -E '^[0-9]+' | head -1)
+  fi
+  if [ -z "$ip" ] && command -v getent &>/dev/null; then
+    ip=$(getent ahosts "$domain" 2>/dev/null | awk '/STREAM/ {print $1; exit}')
+  fi
+  echo "$ip"
+}
+
+generate_api_key() {
+  if [ -f /var/lib/headscale/api_key ]; then
+    print_success "Headscale API key already exists"; return 0
+  fi
+  print_info "Generating Headscale API key for Headplane..."
+  systemctl start headscale
+  local retries=30
+  while [ $retries -gt 0 ]; do
+    headscale users list >/dev/null 2>&1 && break
+    sleep 1; retries=$((retries - 1))
+  done
+  [ $retries -eq 0 ] && { print_error "Headscale failed to start"; return 1; }
+  local key; key=$(headscale apikeys create --expiration 90d 2>&1 | tail -1)
+  [ -z "$key" ] && { print_error "API key creation failed"; return 1; }
+  echo -n "$key" > /var/lib/headscale/api_key
+  chown headscale:headscale /var/lib/headscale/api_key
+  chmod 600 /var/lib/headscale/api_key
+  encrypt_secret_if_supported "/var/lib/headscale/api_key" "headscale_api_key"
+}
+
+write_secrets() {
+  local secret_file="/var/lib/headscale/oidc_client_secret"
+  echo -n "${AZURE_CLIENT_SECRET}" > "$secret_file"
+  chown headscale:headscale "$secret_file"
+  chmod 600 "$secret_file"
+  print_success "OIDC client secret written"
+  encrypt_secret_if_supported "$secret_file" "oidc_client_secret"
+  if [ -f /var/lib/headplane/cookie_secret ]; then
+    encrypt_secret_if_supported "/var/lib/headplane/cookie_secret" "cookie_secret"
+  fi
+}
+
+configure_smtp() {
+  [ -z "$SMTP_SENDER" ] && return 0
+  sed -i "s|SMTP_FROM_EMAIL|$SMTP_SENDER|" /etc/msmtprc
+  sed -i "s|SMTP_USER_EMAIL|${SMTP_USER:-$SMTP_SENDER}|" /etc/msmtprc
+  echo -n "$SMTP_PASSWORD" > /etc/msmtp-password
+  chmod 600 /etc/msmtp-password
+  encrypt_secret_if_supported "/etc/msmtp-password" "smtp_password"
+  echo "root: $SMTP_RECIPIENT" > /etc/aliases
+  print_success "SMTP configured"
+}
+
+# Write environment file with all service vars
+write_env_file() {
+  mkdir -p "$(dirname "$ENV_FILE")"
+  cat > "$ENV_FILE" << EOF
+# Relay Server Configuration - Generated by server-config on $(date)
+HEADSCALE_DOMAIN="${HEADSCALE_DOMAIN}"
+AZURE_TENANT_ID="${AZURE_TENANT_ID}"
+AZURE_CLIENT_ID="${AZURE_CLIENT_ID}"
+AZURE_CLIENT_SECRET="${AZURE_CLIENT_SECRET}"
+ALLOWED_EMAIL="${ALLOWED_EMAIL}"
+MATRIX_DOMAIN="${MATRIX_DOMAIN}"
+MATRIX_SERVER_NAME="${MATRIX_SERVER_NAME}"
+MATRIX_FEDERATION="${MATRIX_FEDERATION}"
+MATRIX_ALLOW_REGISTRATION="${MATRIX_ALLOW_REGISTRATION}"
+MATRIX_REGISTRATION_TOKEN="${MATRIX_REGISTRATION_TOKEN}"
+MATRIX_ENABLED="${MATRIX_ENABLED}"
+SMTP_SENDER="${SMTP_SENDER}"
+SMTP_RECIPIENT="${SMTP_RECIPIENT}"
+SMTP_USER="${SMTP_USER}"
+# Note: SMTP_PASSWORD not written here (stored in /etc/msmtp-password)
+EOF
+  chmod 600 "$ENV_FILE"
+}
+
+# Process templates via envsubst
+process_templates() {
+  export HEADSCALE_DOMAIN AZURE_TENANT_ID AZURE_CLIENT_ID AZURE_CLIENT_SECRET
+  export ALLOWED_EMAIL MATRIX_DOMAIN MATRIX_SERVER_NAME
+  export MATRIX_FEDERATION MATRIX_ALLOW_REGISTRATION MATRIX_REGISTRATION_TOKEN
+  source /etc/relay-server/constants.conf
+  export CONDUIT_LISTEN_PORT
+
+  HEADSCALE_IP=$(resolve_domain_ip "$HEADSCALE_DOMAIN")
+  export HEADSCALE_IP
+
+  envsubst '${HEADSCALE_DOMAIN} ${HEADSCALE_IP} ${AZURE_TENANT_ID} ${AZURE_CLIENT_ID} ${ALLOWED_EMAIL}' \
+    < "$TEMPLATES_DIR/headscale.yaml.tpl" > /etc/headscale/config.yaml
+  envsubst '${HEADSCALE_DOMAIN} ${AZURE_TENANT_ID} ${AZURE_CLIENT_ID}' \
+    < "$TEMPLATES_DIR/headplane.yaml.tpl" > /etc/headplane/config.yaml
+  envsubst '${HEADSCALE_DOMAIN}' \
+    < "$TEMPLATES_DIR/Caddyfile.tpl" > /etc/caddy/Caddyfile
+  chown headscale:headscale /etc/headscale/config.yaml
+  chmod 640 /etc/headscale/config.yaml
+  chown headscale:headscale /etc/headplane/config.yaml
+  chmod 640 /etc/headplane/config.yaml
+  chmod 644 /etc/caddy/Caddyfile
+
+  if [ "${MATRIX_ENABLED:-false}" = "true" ] && [ -f "$TEMPLATES_DIR/Caddyfile-matrix.tpl" ]; then
+    envsubst '${MATRIX_DOMAIN} ${CONDUIT_LISTEN_PORT}' < "$TEMPLATES_DIR/Caddyfile-matrix.tpl" >> /etc/caddy/Caddyfile
+    envsubst '${MATRIX_SERVER_NAME} ${MATRIX_ALLOW_REGISTRATION} ${MATRIX_REGISTRATION_TOKEN} ${MATRIX_FEDERATION} ${CONDUIT_LISTEN_PORT}' \
+      < "$TEMPLATES_DIR/conduit.toml.tpl" > /etc/matrix-conduit/conduit.toml
+    chown conduit:conduit /etc/matrix-conduit/conduit.toml
+    chmod 640 /etc/matrix-conduit/conduit.toml
+  fi
+  unset AZURE_CLIENT_SECRET
+  unset SMTP_PASSWORD
+}
+
+# Detect input mode and load config vars
+load_config() {
+  if [ -n "$CONFIG_FILE" ]; then
+    parse_yaml "$CONFIG_FILE"
+  elif [ ! -t 0 ]; then
+    TMPFILE=$(mktemp)
+    trap 'rm -f "$TMPFILE"' EXIT
+    cat > "$TMPFILE"
+    parse_yaml "$TMPFILE"
+    rm -f "$TMPFILE"
+    trap - EXIT
+  else
+    # Interactive mode: fall back to relay-config
+    source /usr/local/lib/relay-validators.sh
+    exec /usr/local/bin/relay-config
+  fi
+}
+
+print_banner "Relay Server Configuration"
+load_config
+validate_inputs
+if [ "$MATRIX_ALLOW_REGISTRATION" = "true" ] && [ -z "$MATRIX_REGISTRATION_TOKEN" ]; then
+  MATRIX_REGISTRATION_TOKEN=$(openssl rand -hex 32)
+  print_warning "Auto-generated registration token: $MATRIX_REGISTRATION_TOKEN"
+  print_warning "Save this token - you will need it to create accounts"
+fi
+write_env_file
+process_templates
+print_success "Configuration applied"
+
+write_secrets
+generate_api_key
+configure_smtp
+systemctl restart headscale caddy headplane 2>/dev/null || true
+if [ "${MATRIX_ENABLED:-false}" = "true" ]; then
+  systemctl enable conduit 2>/dev/null || true
+  systemctl restart conduit 2>/dev/null || true
+  # Enable fail2ban matrix jail
+  sed -i 's/enabled = false/enabled = true/' /etc/fail2ban/jail.d/matrix-auth.conf
+  systemctl reload fail2ban 2>/dev/null || true
+fi
+print_success "Services restarted"
